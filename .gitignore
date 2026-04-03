@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+
+*.log
+npm-debug.log*
+
+.DS_Store
+Thumbs.db
+
+ascendly/nginx/ssl/
+
+!.env
