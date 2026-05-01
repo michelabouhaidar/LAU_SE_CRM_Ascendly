@@ -33,15 +33,15 @@ export default function Deals() {
   const [loading,        setLoading]        = useState(true)
   const [showCreate,     setShowCreate]     = useState(false)
 
-  
+  // ── filters (#52 — persisted to localStorage)
   const [search,     setSearch]     = useState('')
   const [fStatus,    setFStatus]    = useState(() => localStorage.getItem('deals_fStatus')  ?? 'Open')
   const [fStage,     setFStage]     = useState(() => localStorage.getItem('deals_fStage')   ?? '')
   const [fOwner,     setFOwner]     = useState(() => localStorage.getItem('deals_fOwner')   ?? '')
   const [fContact,   setFContact]   = useState(() => localStorage.getItem('deals_fContact') ?? '')
 
-  
-  const DEFAULT_COLS = { num: true, title: true, contact: true, stage: true, owner: true, value: true, close: true, status: true, updated: true, age: true }
+  // ── column visibility (#57)
+  const DEFAULT_COLS = { num: true, title: true, contact: true, stage: true, owner: true, value: true, close: true, status: true, updated: true, age: true, probability: false, created: false }
   const [visibleCols, setVisibleCols] = useState(() => {
     try { return { ...DEFAULT_COLS, ...JSON.parse(localStorage.getItem('deals_cols') ?? '{}') } }
     catch { return DEFAULT_COLS }
@@ -55,18 +55,18 @@ export default function Deals() {
     })
   }
 
-  
+  // ── sort
   const [sortKey, setSortKey] = useState('updated_at')
   const [sortDir, setSortDir] = useState('desc')
 
-  
+  // ── view mode
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('deals_view') ?? 'list')
   function switchView(mode) { setViewMode(mode); localStorage.setItem('deals_view', mode) }
 
   const isManager = ['Admin', 'Sales Manager'].includes(user?.role)
   const canCreate = ['Admin', 'Sales Manager', 'Sales Rep', 'SDR'].includes(user?.role)
 
-  
+  // #52 — persist filters
   useEffect(() => {
     localStorage.setItem('deals_fStatus',  fStatus)
     localStorage.setItem('deals_fStage',   fStage)
@@ -74,7 +74,7 @@ export default function Deals() {
     localStorage.setItem('deals_fContact', fContact)
   }, [fStatus, fStage, fOwner, fContact])
 
-  
+  // #56 — keyboard shortcut: N → new deal
   useEffect(() => {
     function onKey(e) {
       if (e.key !== 'n' && e.key !== 'N') return
@@ -156,7 +156,7 @@ export default function Deals() {
     return <span style={{ marginLeft: 4, color: 'var(--green-text)' }}>{sortDir === 'asc' ? '↑' : '↓'}</span>
   }
 
-  
+  // apply filters
   let filtered = deals.filter(d => {
     if (fStage   && d.stage_name !== fStage)       return false
     if (fOwner   && d.owner_id   !== fOwner)        return false
@@ -170,7 +170,7 @@ export default function Deals() {
     return true
   })
 
-  
+  // In kanban mode, stage filter is meaningless (columns ARE stages) — filter without it
   const kanbanDeals = viewMode !== 'kanban' ? filtered : deals.filter(d => {
     if (fOwner   && d.owner_id   !== fOwner)   return false
     if (fContact && d.contact_id !== fContact)  return false
@@ -183,10 +183,10 @@ export default function Deals() {
     return true
   })
 
-  
+  // apply sort
   filtered = [...filtered].sort((a, b) => {
     let av = a[sortKey] ?? '', bv = b[sortKey] ?? ''
-    if (sortKey === 'expected_value' || sortKey === 'deal_number') {
+    if (sortKey === 'expected_value' || sortKey === 'deal_number' || sortKey === 'probability') {
       av = parseFloat(av) || 0; bv = parseFloat(bv) || 0
     }
     if (av < bv) return sortDir === 'asc' ? -1 : 1
@@ -202,7 +202,7 @@ export default function Deals() {
 
   return (
     <div>
-      {}
+      {/* ── Header ── */}
       <div className="page-header">
         <div>
           <div className="page-title">Pipeline</div>
@@ -213,7 +213,7 @@ export default function Deals() {
           </div>
         </div>
         <div className="flex items-center gap-8">
-          {}
+          {/* view toggle */}
           <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
             <button onClick={() => switchView('list')} title="List view" style={{
               padding: '5px 9px', background: viewMode === 'list' ? 'var(--green-text)' : 'var(--bg-2)',
@@ -233,7 +233,7 @@ export default function Deals() {
               </svg>
             </button>
           </div>
-            {}
+            {/* #57 Column visibility */}
           <div style={{ position: 'relative' }}>
             <button className="btn btn-outline btn-sm" onClick={() => setShowColPicker(c => !c)} title="Columns">
               ⋮ Columns
@@ -246,8 +246,9 @@ export default function Deals() {
               }}>
                 {[
                   ['num', '#'], ['title', 'Summary'], ['contact', 'Contact'], ['stage', 'Stage'],
-                  ['owner', 'Owner'], ['value', 'Value'], ['close', 'Close Date'],
-                  ['status', 'Status'], ['updated', 'Updated'], ['age', 'Stage Age'],
+                  ['owner', 'Owner'], ['value', 'Value'], ['probability', 'Probability'],
+                  ['close', 'Close Date'], ['status', 'Status'], ['updated', 'Updated'],
+                  ['created', 'Created'], ['age', 'Stage Age'],
                 ].map(([key, label]) => (
                   <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 14px', cursor: 'pointer', fontSize: 13 }}>
                     <input type="checkbox" checked={!!visibleCols[key]} onChange={() => toggleCol(key)} />
@@ -263,9 +264,9 @@ export default function Deals() {
         </div>
       </div>
 
-      {}
+      {/* ── Filter bar ── */}
       <div className="filter-bar" style={{ flexWrap: 'wrap', gap: 8 }}>
-        {}
+        {/* search */}
         <div className="search-wrap" style={{ flex: '1 1 200px', minWidth: 160, maxWidth: 280 }}>
           <svg className="search-icon" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <circle cx="11" cy="11" r="8" /><path strokeLinecap="round" d="M21 21l-4.35-4.35" />
@@ -273,7 +274,7 @@ export default function Deals() {
           <input className="input" placeholder="Search deals…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
 
-        {}
+        {/* status */}
         <div style={{ display: 'flex', gap: 4 }}>
           {['Open', 'Won', 'Lost', 'All'].map(s => (
             <button key={s}
@@ -283,7 +284,7 @@ export default function Deals() {
           ))}
         </div>
 
-        {}
+        {/* stage — hidden in kanban (columns are the stages) */}
         {viewMode !== 'kanban' && (
           <select className="input" style={{ width: 'auto', minWidth: 130, fontSize: 13 }}
             value={fStage} onChange={e => setFStage(e.target.value)}>
@@ -292,7 +293,7 @@ export default function Deals() {
           </select>
         )}
 
-        {}
+        {/* owner — managers only */}
         {isManager && users.length > 0 && (
           <select className="input" style={{ width: 'auto', minWidth: 130, fontSize: 13 }}
             value={fOwner} onChange={e => setFOwner(e.target.value)}>
@@ -303,7 +304,7 @@ export default function Deals() {
           </select>
         )}
 
-        {}
+        {/* contact */}
         <select className="input" style={{ width: 'auto', minWidth: 150, fontSize: 13 }}
           value={fContact} onChange={e => setFContact(e.target.value)}>
           <option value="">All Contacts</option>
@@ -312,7 +313,7 @@ export default function Deals() {
           ))}
         </select>
 
-        {}
+        {/* clear */}
         {(search || (viewMode !== 'kanban' && fStage) || fOwner || fContact) && (
           <button className="btn btn-sm btn-ghost"
             onClick={() => { setSearch(''); setFStage(''); setFOwner(''); setFContact('') }}>
@@ -321,7 +322,7 @@ export default function Deals() {
         )}
       </div>
 
-      {}
+      {/* ── Kanban ── */}
       {viewMode === 'kanban' && loading && (
         <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-2)', fontSize: 14 }}>Loading pipeline…</div>
       )}
@@ -334,7 +335,7 @@ export default function Deals() {
         />
       )}
 
-      {}
+      {/* ── Table ── */}
       {viewMode === 'list' && (<div className="card" style={{ marginTop: 0 }}>
         {loading ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-2)', fontSize: 14 }}>
@@ -360,16 +361,18 @@ export default function Deals() {
             <table className="table">
               <thead>
                 <tr>
-                  {visibleCols.num     && <th style={th} onClick={() => toggleSort('deal_number')}>#<SortIcon field="deal_number" /></th>}
-                  {visibleCols.title   && <th style={th} onClick={() => toggleSort('title')}>Summary<SortIcon field="title" /></th>}
-                  {visibleCols.contact && <th style={th} onClick={() => toggleSort('contact_name')}>Contact<SortIcon field="contact_name" /></th>}
-                  {visibleCols.stage   && <th style={th} onClick={() => toggleSort('stage_position')}>Stage<SortIcon field="stage_position" /></th>}
-                  {visibleCols.age     && <th style={th} onClick={() => toggleSort('days_in_stage')} title="Days in current stage">Age<SortIcon field="days_in_stage" /></th>}
-                  {visibleCols.owner   && isManager && <th style={th} onClick={() => toggleSort('owner_name')}>Owner<SortIcon field="owner_name" /></th>}
-                  {visibleCols.value   && <th style={{ ...th, textAlign: 'right' }} onClick={() => toggleSort('expected_value')}>Value<SortIcon field="expected_value" /></th>}
-                  {visibleCols.close   && <th style={th} onClick={() => toggleSort('expected_close_date')}>Close<SortIcon field="expected_close_date" /></th>}
-                  {visibleCols.status  && <th style={th} onClick={() => toggleSort('status')}>Status<SortIcon field="status" /></th>}
-                  {visibleCols.updated && <th style={th} onClick={() => toggleSort('updated_at')}>Updated<SortIcon field="updated_at" /></th>}
+                  {visibleCols.num         && <th style={th} onClick={() => toggleSort('deal_number')}>#<SortIcon field="deal_number" /></th>}
+                  {visibleCols.title       && <th style={th} onClick={() => toggleSort('title')}>Summary<SortIcon field="title" /></th>}
+                  {visibleCols.contact     && <th style={th} onClick={() => toggleSort('contact_name')}>Contact<SortIcon field="contact_name" /></th>}
+                  {visibleCols.stage       && <th style={th} onClick={() => toggleSort('stage_position')}>Stage<SortIcon field="stage_position" /></th>}
+                  {visibleCols.age         && <th style={th} onClick={() => toggleSort('days_in_stage')} title="Days in current stage">Age<SortIcon field="days_in_stage" /></th>}
+                  {visibleCols.owner       && isManager && <th style={th} onClick={() => toggleSort('owner_name')}>Owner<SortIcon field="owner_name" /></th>}
+                  {visibleCols.value       && <th style={{ ...th, textAlign: 'right' }} onClick={() => toggleSort('expected_value')}>Value<SortIcon field="expected_value" /></th>}
+                  {visibleCols.probability && <th style={{ ...th, textAlign: 'right' }} onClick={() => toggleSort('probability')}>Prob %<SortIcon field="probability" /></th>}
+                  {visibleCols.close       && <th style={th} onClick={() => toggleSort('expected_close_date')}>Close<SortIcon field="expected_close_date" /></th>}
+                  {visibleCols.status      && <th style={th} onClick={() => toggleSort('status')}>Status<SortIcon field="status" /></th>}
+                  {visibleCols.updated     && <th style={th} onClick={() => toggleSort('updated_at')}>Updated<SortIcon field="updated_at" /></th>}
+                  {visibleCols.created     && <th style={th} onClick={() => toggleSort('created_at')}>Created<SortIcon field="created_at" /></th>}
                 </tr>
               </thead>
               <tbody>
@@ -380,7 +383,7 @@ export default function Deals() {
                     && new Date(d.expected_close_date) < new Date()
                   return (
                     <tr key={d.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/deals/${d.id}`)}>
-                      {}
+                      {/* # */}
                       {visibleCols.num && <td>
                         {d.deal_number
                           ? <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--green-text)', fontWeight: 600 }}>
@@ -389,7 +392,7 @@ export default function Deals() {
                           : <span className="text-gray text-sm">—</span>
                         }
                       </td>}
-                      {}
+                      {/* title */}
                       {visibleCols.title && <td>
                         <div className="flex items-center gap-6">
                           <div className="font-semi" style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -401,19 +404,19 @@ export default function Deals() {
                           )}
                         </div>
                       </td>}
-                      {}
+                      {/* contact */}
                       {visibleCols.contact && <td>
                         <div className="text-sm">{d.contact_name ?? '—'}</div>
                         {d.contact_company && <div className="text-gray" style={{ fontSize: 11, marginTop: 1 }}>{d.contact_company}</div>}
                       </td>}
-                      {}
+                      {/* stage */}
                       {visibleCols.stage && <td>
                         <div className="flex items-center gap-6">
                           <div style={{ width: 7, height: 7, borderRadius: '50%', background: stageColor, flexShrink: 0 }} />
                           <span className="text-sm">{d.stage_name}</span>
                         </div>
                       </td>}
-                      {}
+                      {/* stage age #53 */}
                       {visibleCols.age && <td>
                         {d.days_in_stage != null && d.status === 'Open' && (
                           <span title={`${d.days_in_stage} days in ${d.stage_name}`} style={{
@@ -423,19 +426,23 @@ export default function Deals() {
                           }}>{d.days_in_stage}d</span>
                         )}
                       </td>}
-                      {}
+                      {/* owner */}
                       {visibleCols.owner && isManager && <td className="text-sm text-gray">{d.owner_name}</td>}
-                      {}
+                      {/* value */}
                       {visibleCols.value && <td style={{ textAlign: 'right' }}>
                         <span className="mono text-sm">{fmt(d.expected_value)}</span>
                       </td>}
-                      {}
+                      {/* probability */}
+                      {visibleCols.probability && <td style={{ textAlign: 'right' }}>
+                        <span className="text-sm text-gray">{d.probability != null ? `${d.probability}%` : '—'}</span>
+                      </td>}
+                      {/* close date */}
                       {visibleCols.close && <td>
                         <span className="text-sm" style={isOverdue ? { color: '#62c0d5', fontWeight: 600 } : { color: 'var(--text-3)' }}>
                           {fmtDate(d.expected_close_date)}{isOverdue ? ' !' : ''}
                         </span>
                       </td>}
-                      {}
+                      {/* status */}
                       {visibleCols.status && <td>
                         <span style={{
                           fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
@@ -443,9 +450,13 @@ export default function Deals() {
                           color: statusStyle.color, background: statusStyle.bg,
                         }}>{d.status}</span>
                       </td>}
-                      {}
+                      {/* updated */}
                       {visibleCols.updated && <td className="text-sm text-gray" style={{ whiteSpace: 'nowrap' }}>
                         {fmtUpdated(d.updated_at)}
+                      </td>}
+                      {/* created */}
+                      {visibleCols.created && <td className="text-sm text-gray" style={{ whiteSpace: 'nowrap' }}>
+                        {fmtDate(d.created_at)}
                       </td>}
                     </tr>
                   )
@@ -456,7 +467,7 @@ export default function Deals() {
         )}
       </div>)}
 
-      {}
+      {/* ── Load More ── */}
       {!loading && deals.length < dealTotal && (
         <div style={{ textAlign: 'center', marginTop: 12 }}>
           <button
@@ -481,21 +492,29 @@ export default function Deals() {
   )
 }
 
-const WIP_LIMIT = 10 
+/* ── Kanban View ─────────────────────────────────────── */
+const WIP_LIMIT = 10 // #55 — deals per stage before warning
 
 function KanbanView({ filtered, stages, isManager, userRole, fmt, fmtDate, navigate, onMoved }) {
   const draggingRef = useRef(null)
   const [dragOverStage, setDragOverStage] = useState(null)
-  const [moveError,     setMoveError]     = useState(null) 
+  const [moveError,     setMoveError]     = useState(null) // { msg, id }
 
   const isSDR = userRole === 'SDR'
-  
-  const sdrLocked = (stage) => isSDR && stage.position > 3
+  // SDR ceiling: stages at position > 3 and terminal stages are locked for SDRs
+  const sdrLocked = (stage) => isSDR && (stage.position > 3 || stage.is_terminal)
 
   const stageDeals = useMemo(() => {
     const map = {}
     stages.forEach(s => { map[s.id] = [] })
-    filtered.forEach(d => { if (map[d.stage_id] !== undefined) map[d.stage_id].push(d) })
+    const wonStage  = stages.find(s => s.name === 'Won')
+    const lostStage = stages.find(s => s.name === 'Lost')
+    filtered.forEach(d => {
+      // Force Won/Lost deals into their correct terminal columns regardless of stage_id
+      if (d.status === 'Won'  && wonStage)  { map[wonStage.id].push(d);  return }
+      if (d.status === 'Lost' && lostStage) { map[lostStage.id].push(d); return }
+      if (map[d.stage_id] !== undefined) map[d.stage_id].push(d)
+    })
     return map
   }, [filtered, stages])
 
@@ -510,6 +529,7 @@ function KanbanView({ filtered, stages, isManager, userRole, fmt, fmtDate, navig
     if (!deal || deal.stage_id === stage.id) return
     if (sdrLocked(stage)) return
     if (deal.status !== 'Open') return
+    if (!stage.is_terminal && stage.position < deal.stage_position) return
     try {
       await api.patch(`/deals/${deal.id}`, { stage_id: stage.id })
       onMoved()
@@ -555,7 +575,7 @@ function KanbanView({ filtered, stages, isManager, userRole, fmt, fmtDate, navig
                 transition: 'border-color 0.15s, background 0.15s, opacity 0.15s',
               }}
             >
-              {}
+              {/* Column header */}
               <div style={{ padding: '10px 12px 9px', borderBottom: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: val > 0 ? 4 : 0 }}>
                   <div style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: `0 0 0 2px ${color}30` }} />
@@ -581,7 +601,7 @@ function KanbanView({ filtered, stages, isManager, userRole, fmt, fmtDate, navig
                 )}
               </div>
 
-              {}
+              {/* Cards */}
               <div style={{ padding: '8px 8px', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 80, maxHeight: '70vh', overflowY: 'auto' }}>
                 {cards.map(d => {
                   const isOverdue  = d.expected_close_date && d.status === 'Open'
@@ -606,7 +626,7 @@ function KanbanView({ filtered, stages, isManager, userRole, fmt, fmtDate, navig
                       onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 3px 10px rgba(0,0,0,0.15)' }}
                       onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)' }}
                     >
-                      {}
+                      {/* deal number + aging #53 */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
                         {d.deal_number && (
                           <span style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--green-text)', fontWeight: 700 }}>
@@ -620,11 +640,11 @@ function KanbanView({ filtered, stages, isManager, userRole, fmt, fmtDate, navig
                           }}>⏱ {d.days_in_stage}d</span>
                         )}
                       </div>
-                      {}
+                      {/* title */}
                       <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--text)', lineHeight: 1.35, marginBottom: 5, wordBreak: 'break-word' }}>
                         {d.title}
                       </div>
-                      {}
+                      {/* contact */}
                       {d.contact_name && (
                         <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 4 }}>
                           <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ flexShrink: 0 }}>
@@ -635,7 +655,7 @@ function KanbanView({ filtered, stages, isManager, userRole, fmt, fmtDate, navig
                           </span>
                         </div>
                       )}
-                      {}
+                      {/* footer row: value + close date */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
                         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', fontFamily: 'monospace' }}>
                           {fmt(d.expected_value)}
@@ -646,7 +666,7 @@ function KanbanView({ filtered, stages, isManager, userRole, fmt, fmtDate, navig
                           </span>
                         )}
                       </div>
-                      {}
+                      {/* probability bar */}
                       {d.probability != null && d.probability !== '' && (
                         <div style={{ marginTop: 6 }}>
                           <div style={{ height: 3, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
@@ -655,7 +675,7 @@ function KanbanView({ filtered, stages, isManager, userRole, fmt, fmtDate, navig
                           <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 2, textAlign: 'right' }}>{d.probability}%</div>
                         </div>
                       )}
-                      {}
+                      {/* owner badge (managers) */}
                       {isManager && d.owner_name && (
                         <div style={{ marginTop: 5, fontSize: 10, color: 'var(--text-3)', textAlign: 'right' }}>{d.owner_name}</div>
                       )}
@@ -676,6 +696,7 @@ function KanbanView({ filtered, stages, isManager, userRole, fmt, fmtDate, navig
   )
 }
 
+/* ── Create Deal Modal (Jira-style) ──────────────────── */
 function CreateDealModal({ contacts, onClose, onSaved }) {
   const [form, setForm] = useState({
     title: '', description: '', contact_id: '',
@@ -683,7 +704,7 @@ function CreateDealModal({ contacts, onClose, onSaved }) {
   })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  
+  // templates
   const [templates,       setTemplates]       = useState([])
   const [selectedTpl,     setSelectedTpl]     = useState('')
 

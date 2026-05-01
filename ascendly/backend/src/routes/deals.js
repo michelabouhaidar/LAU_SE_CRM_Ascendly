@@ -1,5 +1,6 @@
-
-
+// ══════════════════════════════════════
+//  Ascendly CRM — Deals Routes
+// ══════════════════════════════════════
 const router = require('express').Router()
 const pool   = require('../db/pool')
 const { authenticate, authorize } = require('../middleware/auth')
@@ -32,6 +33,7 @@ const DEAL_SELECT = `
   JOIN stage_catalog sc ON sc.id = d.stage_id
 `
 
+// GET /api/deals  — supports ?limit=50&offset=0&status=&contact_id=&owner_id=&search=
 router.get('/', authenticate, async (req, res, next) => {
   try {
     const limit  = Math.min(parseInt(req.query.limit  ?? 50), 200)
@@ -40,12 +42,12 @@ router.get('/', authenticate, async (req, res, next) => {
     const params  = [req.user.org_id]
     const clauses = [`d.org_id = $1`, `d.deleted_at IS NULL`]
 
-    
+    // Finance: only see Won deals
     if (req.user.role === 'Finance') {
       clauses.push(`d.status = 'Won'`)
     }
 
-    
+    // Sales Rep / SDR: own deals only
     if (req.user.role === 'Sales Rep' || req.user.role === 'SDR') {
       params.push(req.user.id)
       clauses.push(`d.owner_id = $${params.length}`)
@@ -96,6 +98,7 @@ router.get('/', authenticate, async (req, res, next) => {
   }
 })
 
+// GET /api/deals/:id
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -104,7 +107,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
     )
     if (!rows[0]) return res.status(404).json({ error: 'Deal not found.' })
 
-    
+    // Ownership check for Sales Rep / SDR
     if ((req.user.role === 'Sales Rep' || req.user.role === 'SDR') &&
         rows[0].owner_id !== req.user.id) {
       return res.status(403).json({ error: 'You can only view your own deals.' })
@@ -116,9 +119,10 @@ router.get('/:id', authenticate, async (req, res, next) => {
   }
 })
 
+// GET /api/deals/:id/interactions
 router.get('/:id/interactions', authenticate, async (req, res, next) => {
   try {
-    
+    // Org-scope through deals; Sales Rep / SDR restricted to their own deals
     const params = [req.params.id, req.user.org_id]
     let ownerFilter = ''
     if (req.user.role === 'Sales Rep' || req.user.role === 'SDR') {
@@ -140,6 +144,7 @@ router.get('/:id/interactions', authenticate, async (req, res, next) => {
   }
 })
 
+// GET /api/deals/:id/stage-history
 router.get('/:id/stage-history', authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -162,6 +167,7 @@ router.get('/:id/stage-history', authenticate, async (req, res, next) => {
   }
 })
 
+// POST /api/deals/:id/interactions
 router.post('/:id/interactions', authenticate,
   authorize('Admin', 'Sales Manager', 'Sales Rep', 'SDR'),
   async (req, res, next) => {
@@ -170,7 +176,7 @@ router.post('/:id/interactions', authenticate,
       if (!type || !summary)
         return res.status(400).json({ error: 'type and summary are required.' })
 
-      
+      // #48 — reject future interaction dates (allow up to 1 hour ahead for timezone drift)
       if (occurred_at) {
         const oat = new Date(occurred_at)
         if (oat > new Date(Date.now() + 60 * 60 * 1000))
@@ -183,7 +189,7 @@ router.post('/:id/interactions', authenticate,
       )
       if (!dealRows[0]) return res.status(404).json({ error: 'Deal not found.' })
 
-      
+      // Ownership check: Sales Rep and SDR can only log on their own deals
       if ((req.user.role === 'Sales Rep' || req.user.role === 'SDR') && dealRows[0].owner_id !== req.user.id)
         return res.status(403).json({ error: 'You can only log interactions on your own deals.' })
 
@@ -205,20 +211,21 @@ router.post('/:id/interactions', authenticate,
   }
 )
 
+// POST /api/deals
 router.post('/', authenticate,
   authorize('Admin', 'Sales Manager', 'Sales Rep', 'SDR'),
   async (req, res, next) => {
     try {
-      const { contact_id, title, description, expected_value, expected_close_date } = req.body
+      const { contact_id, title, description, expected_value, expected_close_date, probability } = req.body
       const org_id = req.user.org_id
       if (!contact_id || !title)
         return res.status(400).json({ error: 'contact_id and title are required.' })
 
-      
+      // #44 — reject past close dates on new deals
       if (expected_close_date && new Date(expected_close_date) < new Date(new Date().toDateString()))
         return res.status(400).json({ error: 'Expected close date cannot be in the past.' })
 
-      
+      // Duplicate guard: prevent two active deals with the same name for the same contact
       const { rows: dupCheck } = await pool.query(
         `SELECT id FROM deals
          WHERE org_id = $1 AND contact_id = $2 AND LOWER(title) = LOWER($3)
@@ -229,18 +236,15 @@ router.post('/', authenticate,
       if (dupCheck[0])
         return res.status(409).json({ code: 'DUPLICATE', error: `An active deal named "${title}" already exists for this contact.` })
 
-      
+      // Always start deals at the first pipeline stage (position = 1).
+      // The New stage is always active regardless of org_active_stages entries.
       const { rows: firstStage } = await pool.query(
-        `SELECT sc.id FROM stage_catalog sc
-         JOIN org_active_stages oas ON oas.stage_id = sc.id
-         WHERE oas.org_id = $1 AND sc.position = 1
-         LIMIT 1`,
-        [org_id]
+        `SELECT id FROM stage_catalog WHERE position = 1 LIMIT 1`
       )
       if (!firstStage[0])
-        return res.status(400).json({ error: 'No pipeline stages configured for this organisation.' })
+        return res.status(400).json({ error: 'No pipeline stages configured.' })
 
-      
+      // #45 — per-org deal number (atomic counter increment)
       const client = await pool.connect()
       let newDeal
       try {
@@ -254,12 +258,12 @@ router.post('/', authenticate,
         const dealNumber = counter[0].last_number
 
         const { rows } = await client.query(
-          `INSERT INTO deals (org_id, owner_id, contact_id, stage_id, title, description, expected_value, expected_close_date, deal_number)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+          `INSERT INTO deals (org_id, owner_id, contact_id, stage_id, title, description, expected_value, probability, expected_close_date, deal_number)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
           [org_id, req.user.id, contact_id, firstStage[0].id, title,
-           description || null, expected_value || null, expected_close_date || null, dealNumber]
+           description || null, expected_value || null, probability || null, expected_close_date || null, dealNumber]
         )
-        
+        // Log initial stage entry (from_stage = NULL means deal was created at this stage)
         await client.query(
           `INSERT INTO deal_stage_history (deal_id, from_stage, to_stage, moved_by) VALUES ($1, NULL, $2, $3)`,
           [rows[0].id, firstStage[0].id, req.user.id]
@@ -281,11 +285,12 @@ router.post('/', authenticate,
   }
 )
 
+// PATCH /api/deals/:id
 router.patch('/:id', authenticate,
   authorize('Admin', 'Sales Manager', 'Sales Rep', 'SDR'),
   async (req, res, next) => {
     try {
-      
+      // Fetch current deal — org-scoped to prevent cross-tenant access
       const { rows: current } = await pool.query(
         `${DEAL_SELECT} WHERE d.id = $1 AND d.org_id = $2 AND d.deleted_at IS NULL`,
         [req.params.id, req.user.org_id]
@@ -293,7 +298,7 @@ router.patch('/:id', authenticate,
       if (!current[0]) return res.status(404).json({ error: 'Deal not found.' })
       const deal = current[0]
 
-      
+      // Optimistic concurrency: if the client sent _updated_at, verify nothing changed since they loaded
       if (req.body._updated_at) {
         const clientTs = new Date(req.body._updated_at).getTime()
         const serverTs = new Date(deal.updated_at).getTime()
@@ -305,14 +310,14 @@ router.patch('/:id', authenticate,
         }
       }
 
-      
+      // Ownership check for Sales Rep and SDR
       if ((req.user.role === 'Sales Rep' || req.user.role === 'SDR') && deal.owner_id !== req.user.id)
         return res.status(403).json({ error: 'You can only edit your own deals.' })
 
       const { stage_id, title, description, expected_value, probability, expected_close_date,
               status, final_value, contract_date, lost_reason } = req.body
 
-      
+      // Only Admin and Sales Manager may reassign deal ownership
       let owner_id = undefined
       if ((req.user.role === 'Admin' || req.user.role === 'Sales Manager') && req.body.owner_id) {
         const { rows: ownerCheck } = await pool.query(
@@ -324,19 +329,23 @@ router.patch('/:id', authenticate,
         owner_id = req.body.owner_id
       }
 
-      
+      // SDRs cannot mark deals as Won or Lost
+      if (req.user.role === 'SDR' && (status === 'Won' || status === 'Lost'))
+        return res.status(403).json({ error: 'SDRs cannot mark deals as Won or Lost.' })
+
+      // Lost reason is mandatory when marking Lost
       if (status === 'Lost' && !lost_reason?.trim())
         return res.status(400).json({ error: 'A lost reason is required when marking a deal as Lost.' })
 
-      
+      // Resolved values — may be overridden by stage-Win auto-detection
       let resolvedStageId = stage_id
       let autoStatus      = status
 
-      
+      // Stage movement enforcement
       if (stage_id && stage_id !== deal.stage_id) {
-        
+        // Fetch all active stages for this org ordered by position
         const { rows: activeStages } = await pool.query(
-          `SELECT sc.id, sc.name, sc.position
+          `SELECT sc.id, sc.name, sc.position, sc.is_terminal
            FROM stage_catalog sc
            JOIN org_active_stages oas ON oas.stage_id = sc.id
            WHERE oas.org_id = $1
@@ -350,17 +359,28 @@ router.patch('/:id', authenticate,
         if (targetIdx === -1)
           return res.status(400).json({ error: 'Invalid stage.' })
 
-        
-        if (Math.abs(targetIdx - currentIdx) > 1)
-          return res.status(400).json({
-            error: `Stages must be moved one step at a time. Next: "${activeStages[currentIdx + 1]?.name ?? activeStages[currentIdx - 1]?.name}".`
-          })
+        const targetIsTerminal = activeStages[targetIdx].is_terminal
 
-        
+        // SDR cannot move to terminal stages (Won/Lost)
+        if (req.user.role === 'SDR' && targetIsTerminal)
+          return res.status(403).json({ error: 'SDRs cannot mark deals as Won or Lost.' })
+
+        // SDR ceiling: position 3 = Qualified
         if (req.user.role === 'SDR' && activeStages[targetIdx].position > 3)
           return res.status(403).json({ error: 'SDRs can only move deals up to the Qualified stage.' })
 
-        
+        // Non-terminal stages: enforce forward-only and sequential movement
+        if (!targetIsTerminal) {
+          if (targetIdx < currentIdx)
+            return res.status(400).json({ error: 'Stages cannot be moved backwards.' })
+
+          if (targetIdx - currentIdx > 1)
+            return res.status(400).json({
+              error: `Stages must be moved one step at a time. Next: "${activeStages[currentIdx + 1]?.name}".`
+            })
+        }
+
+        // Forward move activity gate: must have ≥1 interaction and ≥1 task on the deal
         if (targetIdx > currentIdx) {
           const { rows: activity } = await pool.query(
             `SELECT
@@ -374,7 +394,7 @@ router.patch('/:id', authenticate,
             return res.status(400).json({ error: 'Create at least one task before advancing to the next stage.' })
         }
 
-        
+        // Moving to Won stage: require final_value and auto-set status
         if (activeStages[targetIdx].name === 'Won') {
           const effectiveFinalValue = final_value ?? deal.final_value
           if (!effectiveFinalValue)
@@ -382,7 +402,7 @@ router.patch('/:id', authenticate,
           autoStatus = 'Won'
         }
 
-        
+        // Enforce stage required fields
         const { rows: reqFields } = await pool.query(
           `SELECT field FROM stage_required_fields WHERE stage_id = $1`, [stage_id]
         )
@@ -406,7 +426,7 @@ router.patch('/:id', authenticate,
             })
         }
 
-        
+        // Log stage history
         await pool.query(
           `INSERT INTO deal_stage_history (deal_id, from_stage, to_stage, moved_by)
            VALUES ($1, $2, $3, $4)`,
@@ -419,10 +439,10 @@ router.patch('/:id', authenticate,
           deal.org_id, 'deal', req.params.id)
       }
 
-      
-      
+      // If marking Won via status field (not stage drag), auto-advance stage to Won
+      // and run the same validations that a stage-move would enforce.
       if (autoStatus === 'Won' && !stage_id) {
-        
+        // final_value is mandatory for Won
         const effectiveFinalValue = final_value ?? deal.final_value
         if (!effectiveFinalValue)
           return res.status(400).json({ error: 'Set a final value before marking a deal as Won.' })
@@ -436,7 +456,7 @@ router.patch('/:id', authenticate,
         if (wonStage[0]) {
           resolvedStageId = wonStage[0].id
 
-          
+          // Enforce any required fields configured for the Won stage
           const { rows: reqFields } = await pool.query(
             `SELECT field FROM stage_required_fields WHERE stage_id = $1`, [wonStage[0].id]
           )
@@ -463,6 +483,17 @@ router.patch('/:id', authenticate,
       }
 
       const fmtVal = v => (v != null ? `$${Number(v).toLocaleString()}` : '—')
+
+      // If marking Lost via status field, auto-advance stage_id to the Lost stage
+      if (autoStatus === 'Lost' && !stage_id) {
+        const { rows: lostStage } = await pool.query(
+          `SELECT sc.id FROM stage_catalog sc
+           JOIN org_active_stages oas ON oas.stage_id = sc.id
+           WHERE oas.org_id = $1 AND sc.name = 'Lost' LIMIT 1`,
+          [req.user.org_id]
+        )
+        if (lostStage[0]) resolvedStageId = lostStage[0].id
+      }
 
       if (autoStatus === 'Won')
         await writeAudit(req.user.id, 'DEAL_WON',
@@ -513,7 +544,7 @@ router.patch('/:id', authenticate,
          autoStatus, final_value, contract_date, lost_reason, owner_id, req.params.id, req.user.org_id]
       )
 
-      
+      // #47 — log value change when expected_value changes
       if (expected_value != null && String(expected_value) !== String(deal.expected_value ?? '')) {
         await pool.query(
           `INSERT INTO deal_value_history (deal_id, changed_by, old_value, new_value)
@@ -529,6 +560,7 @@ router.patch('/:id', authenticate,
   }
 )
 
+// PATCH /api/deals/:id/assign  — SDR assigns qualified deal to Sales Rep
 router.patch('/:id/assign', authenticate,
   authorize('Admin', 'Sales Manager', 'SDR'),
   async (req, res, next) => {
@@ -537,7 +569,7 @@ router.patch('/:id/assign', authenticate,
       if (!owner_id)
         return res.status(400).json({ error: 'owner_id is required.' })
 
-      
+      // Verify new owner is an active Sales Rep in the same org
       const { rows: newOwner } = await pool.query(
         `SELECT id, name, role FROM employees WHERE id = $1 AND org_id = $2 AND is_active = true`,
         [owner_id, req.user.org_id]
@@ -547,7 +579,7 @@ router.patch('/:id/assign', authenticate,
       if (newOwner[0].role !== 'Sales Rep')
         return res.status(400).json({ error: 'Can only assign deals to Sales Reps.' })
 
-      
+      // Fetch deal for validation and audit — org-scoped to prevent cross-tenant access
       const { rows: dealRows } = await pool.query(
         `SELECT d.*, sc.name AS stage_name, e.name AS owner_name FROM deals d
          JOIN stage_catalog sc ON sc.id = d.stage_id
@@ -557,7 +589,7 @@ router.patch('/:id/assign', authenticate,
       )
       if (!dealRows[0]) return res.status(404).json({ error: 'Deal not found.' })
 
-      
+      // SDR: deal must be at Qualified stage
       if (req.user.role === 'SDR' && dealRows[0].stage_name !== 'Qualified')
         return res.status(403).json({ error: 'SDRs can only assign deals at the Qualified stage.' })
 
@@ -578,6 +610,7 @@ router.patch('/:id/assign', authenticate,
   }
 )
 
+// POST /api/deals/:id/clone
 router.post('/:id/clone', authenticate,
   authorize('Admin', 'Sales Manager', 'Sales Rep', 'SDR'),
   async (req, res, next) => {
@@ -589,15 +622,12 @@ router.post('/:id/clone', authenticate,
       if (!src[0]) return res.status(404).json({ error: 'Deal not found.' })
 
       const { rows: firstStage } = await pool.query(
-        `SELECT sc.id FROM stage_catalog sc
-         JOIN org_active_stages oas ON oas.stage_id = sc.id
-         WHERE oas.org_id = $1 AND sc.position = 1 LIMIT 1`,
-        [req.user.org_id]
+        `SELECT id FROM stage_catalog WHERE position = 1 LIMIT 1`
       )
       if (!firstStage[0]) return res.status(400).json({ error: 'No pipeline stages configured.' })
 
       const d = src[0]
-      
+      // #45 — use per-org deal counter for cloned deals too
       const cloneClient = await pool.connect()
       let clonedDeal
       try {
@@ -633,6 +663,9 @@ router.post('/:id/clone', authenticate,
   }
 )
 
+// ── Comments (#50 + #54) ────────────────────────────────────────────────────
+
+// GET /api/deals/:id/comments
 router.get('/:id/comments', authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -649,6 +682,7 @@ router.get('/:id/comments', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// POST /api/deals/:id/comments
 router.post('/:id/comments', authenticate,
   authorize('Admin', 'Sales Manager', 'Sales Rep', 'SDR'),
   async (req, res, next) => {
@@ -656,7 +690,7 @@ router.post('/:id/comments', authenticate,
       const { body, mentions = [] } = req.body
       if (!body?.trim()) return res.status(400).json({ error: 'Comment body is required.' })
 
-      
+      // Verify deal belongs to caller's org before inserting
       const { rows: dealCheck } = await pool.query(
         `SELECT id FROM deals WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`,
         [req.params.id, req.user.org_id]
@@ -682,6 +716,7 @@ router.post('/:id/comments', authenticate,
   }
 )
 
+// DELETE /api/deals/:id/comments/:cid — author or Admin only
 router.delete('/:id/comments/:cid', authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -699,6 +734,25 @@ router.delete('/:id/comments/:cid', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// GET /api/deals/:id/approval — latest approval for this deal (any authenticated user)
+router.get('/:id/approval', authenticate, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT a.id, a.type, a.discount_pct, a.justification, a.status, a.request_date, a.decision_date,
+              e1.name AS requested_by_name, e2.name AS decided_by_name
+       FROM approvals a
+       JOIN deals d ON d.id = a.deal_id
+       JOIN employees e1 ON e1.id = a.requested_by
+       LEFT JOIN employees e2 ON e2.id = a.reviewed_by
+       WHERE a.deal_id = $1 AND d.org_id = $2 AND d.deleted_at IS NULL
+       ORDER BY a.request_date ASC`,
+      [req.params.id, req.user.org_id]
+    )
+    res.json(rows)
+  } catch (err) { next(err) }
+})
+
+// GET /api/deals/:id/value-history — #47
 router.get('/:id/value-history', authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -714,6 +768,7 @@ router.get('/:id/value-history', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// DELETE /api/deals/:id  — Admin only (soft delete #43)
 router.delete('/:id', authenticate, authorize('Admin'), async (req, res, next) => {
   try {
     const { rows } = await pool.query(

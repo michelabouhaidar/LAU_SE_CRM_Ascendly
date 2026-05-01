@@ -32,7 +32,7 @@ export function AuthProvider({ children }) {
     try {
       await api.post('/auth/logout', { refreshToken })
     } catch {
-      
+      // best-effort — clear locally regardless
     }
     localStorage.removeItem('crm_token')
     localStorage.removeItem('crm_refresh_token')

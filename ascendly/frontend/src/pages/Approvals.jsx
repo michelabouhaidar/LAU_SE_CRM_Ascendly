@@ -142,7 +142,7 @@ export default function Approvals() {
             </table>
           </div>
         ) : (
-          
+          /* ── Cards view ─────────────────────────────── */
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
@@ -164,7 +164,7 @@ export default function Approvals() {
                   onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.15)' }}
                   onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none' }}
                 >
-                  {}
+                  {/* Deal */}
                   <div>
                     {a.deal_number && (
                       <div style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--green-text)', fontWeight: 700, marginBottom: 3 }}>
@@ -179,7 +179,7 @@ export default function Approvals() {
                     )}
                   </div>
 
-                  {}
+                  {/* Type + Status + Discount */}
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                     <Chip color="#3B82F6" label={a.type} />
                     <Chip color={statusColor} label={a.status} />
@@ -188,7 +188,7 @@ export default function Approvals() {
                     )}
                   </div>
 
-                  {}
+                  {/* Footer */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                       <UserAvatar name={a.requested_by_name} size={24} />

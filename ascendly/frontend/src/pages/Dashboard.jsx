@@ -26,6 +26,13 @@ function initials(name) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
+/* ══════════════════════════════════════════════════
+   VBars — vertical bar chart using pixel heights (the CSS % fix)
+══════════════════════════════════════════════════ */
+// data: array of { key, label, value, color }
+// chartH: usable bar area height in pixels
+// filter: current chart filter state { type, value } or null
+// onSelect(filter_or_null): called when bar is clicked
 function VBars({ data, chartH = 130, filter, onSelect, formatVal }) {
   const max = Math.max(...data.map(d => parseFloat(d.value) || 0), 1)
   return (
@@ -37,7 +44,7 @@ function VBars({ data, chartH = 130, filter, onSelect, formatVal }) {
           <div key={d.key} onClick={() => onSelect?.(isLit && filter ? null : { value: d.key, label: d.label })}
             style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
               cursor: onSelect ? 'pointer' : 'default', opacity: isLit ? 1 : 0.28, transition: 'opacity 0.2s' }}>
-            {}
+            {/* inner area: fixed height, bar grows from bottom */}
             <div style={{ height: chartH, display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'flex-end', width: '100%' }}>
               <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-2)', marginBottom: 3, lineHeight: 1 }}>
@@ -57,6 +64,13 @@ function VBars({ data, chartH = 130, filter, onSelect, formatVal }) {
   )
 }
 
+/* ══════════════════════════════════════════════════
+   GroupedVBars — two bars per column with pixel heights
+══════════════════════════════════════════════════ */
+// data: array of { key, label, a, b }  (a = first bar, b = second bar)
+// colorA, colorB: bar colors
+// filter: current filter or null
+// onSelect: called with { value: key, label }
 function GroupedVBars({ data, chartH = 120, colorA = '#74ba89', colorB = '#ef4444', filter, onSelect, fmtA, fmtB }) {
   const max = Math.max(...data.flatMap(d => [parseFloat(d.a) || 0, parseFloat(d.b) || 0]), 1)
   return (
@@ -70,7 +84,7 @@ function GroupedVBars({ data, chartH = 120, colorA = '#74ba89', colorB = '#ef444
             style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
               cursor: onSelect ? 'pointer' : 'default', opacity: isLit ? 1 : 0.28, transition: 'opacity 0.2s' }}>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: chartH }}>
-              {}
+              {/* Bar A */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
                 justifyContent: 'flex-end', height: chartH, flex: 1 }}>
                 <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-2)', marginBottom: 2 }}>
@@ -79,7 +93,7 @@ function GroupedVBars({ data, chartH = 120, colorA = '#74ba89', colorB = '#ef444
                 <div style={{ width: '100%', height: aH, background: colorA,
                   borderRadius: '2px 2px 0 0', flexShrink: 0, transition: 'height 0.4s ease' }} />
               </div>
-              {}
+              {/* Bar B */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
                 justifyContent: 'flex-end', height: chartH, flex: 1 }}>
                 <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-2)', marginBottom: 2 }}>
@@ -97,6 +111,9 @@ function GroupedVBars({ data, chartH = 120, colorA = '#74ba89', colorB = '#ef444
   )
 }
 
+/* ══════════════════════════════════════════════════
+   ROUTER
+══════════════════════════════════════════════════ */
 export default function Dashboard() {
   const { user } = useAuth()
   const navigate  = useNavigate()
@@ -108,6 +125,9 @@ export default function Dashboard() {
     : <TeamDashboard user={user} navigate={navigate} />
 }
 
+/* ══════════════════════════════════════════════════
+   TEAM DASHBOARD  (Admin / Sales Manager)
+══════════════════════════════════════════════════ */
 function TeamDashboard({ user, navigate }) {
   const [stats,         setStats]         = useState(null)
   const [deals,         setDeals]         = useState([])
@@ -123,7 +143,7 @@ function TeamDashboard({ user, navigate }) {
   const [approvals,     setApprovals]     = useState([])
   const [taskByRep,     setTaskByRep]     = useState([])
   const [loading,       setLoading]       = useState(true)
-  const [selectedRep,   setSelectedRep]   = useState(null) 
+  const [selectedRep,   setSelectedRep]   = useState(null) // { id, name } or null
   const [apiError,      setApiError]      = useState(false)
 
   function selectRep(rep) {
@@ -207,7 +227,7 @@ function TeamDashboard({ user, navigate }) {
         </div>
       )}
 
-      {}
+      {/* ── Stat Cards ── */}
       <div className="stats-grid">
         <StatCard label="Revenue Won"    value={fmt(stats?.revenue)}     sub={`from ${stats?.won ?? 0} deals won`}                                    loading={loading} />
         <StatCard label="Avg Deal Value" value={fmt(stats?.avgDeal)}     sub="per won deal"                                                           loading={loading} />
@@ -226,20 +246,20 @@ function TeamDashboard({ user, navigate }) {
         transition: 'opacity 0.35s ease, filter 0.35s ease, transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
       }}>
 
-      {}
+      {/* ── ROW 1: Pipeline + Monthly Revenue ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Pipeline Overview</div>
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: 14, marginBottom: 14 }}>
         <PipelineFunnelCard pipeline={pipeline} loading={loading} />
         <MonthlyWinsCard monthly={monthly} loading={loading} />
       </div>
 
-      {}
+      {/* ── ROW 2: Top performers ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Top Performers</div>
       <div style={{ marginBottom: 14 }}>
         <MiniLeaderboard reps={topReps} loading={loading} selectedRep={selectedRep} onSelectRep={selectRep} />
       </div>
 
-      </div>{}
+      </div>{/* end loading fade wrapper */}
 
       <DualCardGrid
         deals={selectedRep ? deals.filter(d => d.owner_id === selectedRep.id) : deals}
@@ -253,6 +273,9 @@ function TeamDashboard({ user, navigate }) {
   )
 }
 
+/* ══════════════════════════════════════════════════
+   PERSONAL DASHBOARD  (Sales Rep / SDR)
+══════════════════════════════════════════════════ */
 function PersonalDashboard({ user, navigate }) {
   const [stats,      setStats]      = useState(null)
   const [myStats,    setMyStats]    = useState(null)
@@ -316,7 +339,7 @@ function PersonalDashboard({ user, navigate }) {
         </div>
       )}
 
-      {}
+      {/* ── Stat Cards ── */}
       <div className="stats-grid">
         <StatCard label="My Open Deals"  value={stats?.myDeals ?? '—'}     sub="in your pipeline"           loading={loading} />
         <StatCard label="Pipeline Value" value={fmt(stats?.pipelineValue)} sub="expected across open deals" loading={loading} />
@@ -330,21 +353,21 @@ function PersonalDashboard({ user, navigate }) {
         />
       </div>
 
-      {}
+      {/* ── ROW 1: Personal performance ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>My Performance</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
         <MyWinRateCard myStats={myStats} loading={loading} />
         <MyPipelineCard deals={allDeals} loading={loading} />
       </div>
 
-      {}
+      {/* ── ROW 2: Activity ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Activity</div>
       <div className="grid-2" style={{ marginBottom: 14 }}>
         <MyMonthlyCard myMonthly={myMonthly} loading={loading} />
         <TaskRingCard stats={stats} loading={loading} />
       </div>
 
-      {}
+      {/* ── ROW 3: Quick metrics ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Quick Metrics</div>
       <div className="grid-3" style={{ marginBottom: 24 }}>
         <DealCyclePersonalCard myStats={myStats} loading={loading} />
@@ -364,6 +387,9 @@ function PersonalDashboard({ user, navigate }) {
   )
 }
 
+/* ══════════════════════════════════════════════════
+   FINANCE DASHBOARD
+══════════════════════════════════════════════════ */
 function FinanceDashboard() {
   const { user }  = useAuth()
   const navigate   = useNavigate()
@@ -378,7 +404,7 @@ function FinanceDashboard() {
   const [cycle,         setCycle]         = useState(null)
   const [approvals,     setApprovals]     = useState([])
   const [loading,       setLoading]       = useState(true)
-  const [selectedRep,   setSelectedRep]   = useState(null) 
+  const [selectedRep,   setSelectedRep]   = useState(null) // { id, name } or null
   const [apiError,      setApiError]      = useState(false)
 
   function selectRep(rep) {
@@ -460,7 +486,7 @@ function FinanceDashboard() {
         </div>
       )}
 
-      {}
+      {/* ── Stat Cards ── */}
       <div className="stats-grid">
         <StatCard label="Total Revenue"     value={fmt(revenue?.total_revenue)}      sub={`from ${revenue?.total_won ?? 0} won deals`}      loading={loading} />
         <StatCard label="Avg Deal Value"    value={fmt(revenue?.avg_deal_value)}     sub="per won deal"                                     loading={loading} />
@@ -468,28 +494,28 @@ function FinanceDashboard() {
         <StatCard label="Weighted Forecast" value={fmt(forecast?.weighted_forecast)} sub={`across ${forecast?.open_deals ?? 0} open deals`} loading={loading} />
       </div>
 
-      {}
+      {/* ── ROW 1: Revenue ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Revenue</div>
       <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 14, marginBottom: 14 }}>
         <MonthlyRevenueCard monthly={monthly} loading={loading} />
         <DealCycleCard cycle={cycle} loading={loading} />
       </div>
 
-      {}
+      {/* ── ROW 2: Pipeline & distribution ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Pipeline & Distribution</div>
       <div className="grid-2" style={{ marginBottom: 14 }}>
         <PipelineByStageCard pipeline={pipeline} loading={loading} />
         <DealSizeCard sizeBuckets={sizeBuckets} loading={loading} />
       </div>
 
-      {}
+      {/* ── ROW 3: Rep & source ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Rep & Source Breakdown</div>
       <div className="grid-2" style={{ marginBottom: 14 }}>
         <RepPipelineCard repPipeline={repPipeline} loading={loading} selectedRep={selectedRep} onSelectRep={selectRep} />
         <LeadSourceCard leadSources={leadSources} loading={loading} />
       </div>
 
-      {}
+      {/* ── ROW 4: Monthly trends + approvals ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Monthly Trends</div>
       <div className="grid-2" style={{ marginBottom: 24 }}>
         <MonthlyCreatedCard monthlyCreated={monthlyCreated} loading={loading} />
@@ -498,6 +524,10 @@ function FinanceDashboard() {
     </div>
   )
 }
+
+/* ══════════════════════════════════════════════════
+   CHART COMPONENTS — TEAM
+══════════════════════════════════════════════════ */
 
 function DonutRing({ value, total, color = '#22C55E', size = 100, thickness = 11 }) {
   const R   = (size - thickness) / 2
@@ -880,6 +910,10 @@ function QuickStatsCard({ stats, totalPipeline, loading }) {
   )
 }
 
+/* ══════════════════════════════════════════════════
+   CHART COMPONENTS — PERSONAL
+══════════════════════════════════════════════════ */
+
 function MyWinRateCard({ myStats, loading }) {
   const won    = Number(myStats?.won ?? 0)
   const lost   = Number(myStats?.lost ?? 0)
@@ -1075,6 +1109,10 @@ function MyActivitySummaryCard({ stats, myStats, loading }) {
   )
 }
 
+/* ══════════════════════════════════════════════════
+   CHART COMPONENTS — FINANCE
+══════════════════════════════════════════════════ */
+
 function MonthlyRevenueCard({ monthly, loading }) {
   return (
     <div className="card card-pad">
@@ -1163,6 +1201,10 @@ function LeadSourceCard({ leadSources, loading }) {
     </div>
   )
 }
+
+/* ══════════════════════════════════════════════════
+   SHARED COMPONENTS
+══════════════════════════════════════════════════ */
 
 function Chip({ color, label }) {
   return (

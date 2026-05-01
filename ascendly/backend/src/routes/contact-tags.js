@@ -1,5 +1,6 @@
-
-
+// ══════════════════════════════════════
+//  Ascendly CRM — Contact Tags Routes
+// ══════════════════════════════════════
 const router = require('express').Router()
 const pool   = require('../db/pool')
 const { authenticate, authorize } = require('../middleware/auth')
@@ -7,6 +8,7 @@ const { sendOk }     = require('../middleware/respond')
 
 const TAG_COLORS = ['#6B7A90','#3B82F6','#8B5CF6','#F59E0B','#62c0d5','#22C55E','#F97316','#14B8A6','#EC4899']
 
+// GET /api/contact-tags
 router.get('/', authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -21,6 +23,7 @@ router.get('/', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// POST /api/contact-tags
 router.post('/', authenticate, authorize('Admin', 'Sales Manager', 'Sales Rep', 'SDR'), async (req, res, next) => {
   try {
     const { name, color } = req.body
@@ -37,6 +40,7 @@ router.post('/', authenticate, authorize('Admin', 'Sales Manager', 'Sales Rep', 
   }
 })
 
+// DELETE /api/contact-tags/:id
 router.delete('/:id', authenticate, authorize('Admin', 'Sales Manager'), async (req, res, next) => {
   try {
     await pool.query(`DELETE FROM contact_tags WHERE id=$1 AND org_id=$2`, [req.params.id, req.user.org_id])

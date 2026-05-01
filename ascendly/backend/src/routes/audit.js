@@ -1,5 +1,6 @@
-
-
+// ══════════════════════════════════════
+//  Ascendly CRM — Audit Log Routes
+// ══════════════════════════════════════
 const crypto = require("crypto");
 const router = require("express").Router();
 const pool   = require("../db/pool");
@@ -9,6 +10,8 @@ const ALLOWED_SORTS = new Set([
   'occurred_at', 'action', 'entity_type', 'actor_name', 'org_name', 'description',
 ]);
 
+// GET /api/audit — paginated, searched, filtered, sorted audit log
+// Super admin → all entries; other admins → own org only
 router.get("/", authenticate, authorize("Admin"), async (req, res, next) => {
   try {
     const limit  = Math.min(parseInt(req.query.limit) || 50, 200);
@@ -25,7 +28,7 @@ router.get("/", authenticate, authorize("Admin"), async (req, res, next) => {
       : sort === 'org_name' ? 'o.name'
       : `a.${sort}`;
 
-    
+    // Build shared WHERE clauses
     const params  = [];
     const clauses = [];
 
@@ -85,6 +88,7 @@ router.get("/", authenticate, authorize("Admin"), async (req, res, next) => {
   }
 });
 
+// GET /api/audit/verify — recompute chain hashes and report tampered entries (#40)
 router.get("/verify", authenticate, authorize("Admin"), async (req, res, next) => {
   try {
     const params = isSuperAdmin(req) ? [] : [req.user.org_id]
@@ -97,12 +101,12 @@ router.get("/verify", authenticate, authorize("Admin"), async (req, res, next) =
       params
     )
 
-    
+    // Verify per-org hash chains independently
     const prevByOrg = {}
     const tamperedIds = []
 
     for (const row of rows) {
-      if (!row.chain_hash) continue 
+      if (!row.chain_hash) continue // pre-migration entries — skip
       const key      = row.org_id || '__global__'
       const prevHash = prevByOrg[key] || '0'.repeat(64)
       const input    = `${prevHash}|${row.action}|${row.description || ''}|${new Date(row.occurred_at).toISOString()}`

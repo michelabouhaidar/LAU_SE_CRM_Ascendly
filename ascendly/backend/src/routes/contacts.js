@@ -1,5 +1,6 @@
-
-
+// ══════════════════════════════════════
+//  Ascendly CRM — Contacts Routes
+// ══════════════════════════════════════
 const router = require("express").Router();
 const pool   = require("../db/pool");
 const { authenticate, authorize } = require("../middleware/auth");
@@ -10,12 +11,15 @@ const crypto          = require('crypto')
 const UUID_RE         = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const CSV_IMPORT_MAX  = 500
 
+// In-memory job store for async CSV imports. Keyed by jobId (UUID).
+// Entries are removed 10 minutes after completion to avoid unbounded growth.
 const importJobs = new Map()
 router.param('id', (req, res, next, id) => {
   if (!UUID_RE.test(id)) return res.status(404).json({ error: 'Not found.' })
   next()
 })
 
+// GET /api/contacts  — supports ?limit=50&offset=0&search=&tag_id=
 router.get("/", authenticate, async (req, res, next) => {
   try {
     const limit  = Math.min(parseInt(req.query.limit  ?? 50),  200)
@@ -64,6 +68,7 @@ router.get("/", authenticate, async (req, res, next) => {
   }
 });
 
+// GET /api/contacts/duplicates — must be declared before /:id to avoid Express matching "duplicates" as an id param
 router.get("/duplicates", authenticate, async (req, res, next) => {
   try {
     const [emailDups, nameDups] = await Promise.all([
@@ -91,6 +96,7 @@ router.get("/duplicates", authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// GET /api/contacts/:id
 router.get("/:id", authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -113,6 +119,8 @@ router.get("/:id", authenticate, async (req, res, next) => {
     next(err);
   }
 });
+
+// POST /api/contacts
 
 router.post("/", authenticate, authorize("Admin", "Sales Manager", "Sales Rep", "SDR"), async (req, res, next) => {
   try {
@@ -139,6 +147,7 @@ router.post("/", authenticate, authorize("Admin", "Sales Manager", "Sales Rep", 
   }
 });
 
+// PATCH /api/contacts/:id
 router.patch("/:id", authenticate, authorize("Admin", "Sales Manager", "Sales Rep", "SDR"), async (req, res, next) => {
   try {
     const { full_name, email, phone, company, lead_source, notes } = req.body;
@@ -170,22 +179,11 @@ router.patch("/:id", authenticate, authorize("Admin", "Sales Manager", "Sales Re
   }
 });
 
-router.delete("/:id", authenticate, authorize("Admin"), async (req, res, next) => {
-  try {
-    const { rows } = await pool.query(
-      `UPDATE contacts SET deleted_at = NOW()
-       WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL
-       RETURNING id, full_name`,
-      [req.params.id, req.user.org_id]
-    );
-    if (!rows[0]) return res.status(404).json({ error: "Contact not found." });
-    await writeAudit(req.user.id, 'CONTACT_DELETED', `Contact "${rows[0].full_name}" deleted`, req.user.org_id, 'contact', rows[0].id);
-    sendOk(res, "Contact deleted.");
-  } catch (err) {
-    next(err);
-  }
-});
 
+// ── CSV Import ───────────────────────────────────────────────────────────────
+// POST /api/contacts/import
+// Body: { rows: [{ full_name, email, phone, company, lead_source, notes }] }
+// Returns 202 immediately with { jobId }; poll GET /import/:jobId for status.
 router.post("/import", authenticate,
   authorize("Admin", "Sales Manager", "Sales Rep", "SDR"),
   (req, res, next) => {
@@ -202,7 +200,7 @@ router.post("/import", authenticate,
     importJobs.set(jobId, { status: 'pending', imported: 0, errors: [], total: rawRows.length })
     res.status(202).json({ jobId })
 
-    
+    // Process rows after the HTTP response is flushed (non-blocking to caller).
     setImmediate(async () => {
       let imported = 0
       const errors = []
@@ -229,12 +227,13 @@ router.post("/import", authenticate,
           `${imported} contacts imported via CSV`, orgId, 'contact', null).catch(() => {})
 
       importJobs.set(jobId, { status: 'done', imported, errors, total: rawRows.length })
-      
+      // Auto-remove after 10 minutes to prevent memory leak
       setTimeout(() => importJobs.delete(jobId), 10 * 60 * 1000)
     })
   }
 )
 
+// GET /api/contacts/import/:jobId — poll import job status
 router.get("/import/:jobId", authenticate,
   authorize("Admin", "Sales Manager", "Sales Rep", "SDR"),
   (req, res) => {
@@ -244,6 +243,8 @@ router.get("/import/:jobId", authenticate,
   }
 )
 
+// ── Merge ────────────────────────────────────────────────────────────────────
+// POST /api/contacts/:id/merge  — keep :id, delete source_id
 router.post("/:id/merge", authenticate, authorize("Admin", "Sales Manager"), async (req, res, next) => {
   try {
     const { source_id } = req.body
@@ -256,8 +257,8 @@ router.post("/:id/merge", authenticate, authorize("Admin", "Sales Manager"), asy
     )
     if (both.length < 2) return res.status(404).json({ error: "One or both contacts not found." })
 
-    
-    
+    // Run all merge steps in a single transaction so a mid-way failure
+    // never leaves deals/tasks pointing to a deleted contact.
     const client = await pool.connect()
     let deleted
     try {
@@ -291,6 +292,8 @@ router.post("/:id/merge", authenticate, authorize("Admin", "Sales Manager"), asy
   } catch (err) { next(err) }
 })
 
+// ── Per-contact timeline batch endpoints (#72 — eliminates N+1 in ContactDetail) ──
+// GET /api/contacts/:id/interactions — all interactions across every deal for this contact
 router.get("/:id/interactions", authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -306,6 +309,7 @@ router.get("/:id/interactions", authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// GET /api/contacts/:id/stage-history — all stage moves across every deal for this contact
 router.get("/:id/stage-history", authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -323,6 +327,8 @@ router.get("/:id/stage-history", authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// ── Tags (per contact) ───────────────────────────────────────────────────────
+// GET /api/contacts/:id/tags
 router.get("/:id/tags", authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -337,6 +343,7 @@ router.get("/:id/tags", authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// POST /api/contacts/:id/tags  — assign tag
 router.post("/:id/tags", authenticate,
   authorize("Admin", "Sales Manager", "Sales Rep", "SDR"),
   async (req, res, next) => {
@@ -344,7 +351,7 @@ router.post("/:id/tags", authenticate,
       const { tag_id } = req.body
       if (!tag_id) return res.status(400).json({ error: "tag_id is required." })
 
-      
+      // Verify contact and tag both belong to the caller's org
       const { rows: contactCheck } = await pool.query(
         `SELECT id FROM contacts WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`,
         [req.params.id, req.user.org_id]
@@ -366,11 +373,12 @@ router.post("/:id/tags", authenticate,
   }
 )
 
+// DELETE /api/contacts/:id/tags/:tagId  — remove tag
 router.delete("/:id/tags/:tagId", authenticate,
   authorize("Admin", "Sales Manager", "Sales Rep", "SDR"),
   async (req, res, next) => {
     try {
-      
+      // Verify contact belongs to the caller's org before removing tag
       const { rows: contactCheck } = await pool.query(
         `SELECT id FROM contacts WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`,
         [req.params.id, req.user.org_id]

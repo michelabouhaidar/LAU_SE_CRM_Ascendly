@@ -59,12 +59,12 @@ export default function Layout() {
   const [searchOpen,     setSearchOpen]     = useState(false)
   const searchRef = useRef(null)
 
-  
+  // Org switcher for super admin
   const [orgs,          setOrgs]          = useState([])
   const [selectedOrgId, setSelectedOrgId] = useState(() => localStorage.getItem('crm_selected_org') ?? '')
 
   useEffect(() => {
-    if (!['Admin', 'Sales Manager'].includes(user?.role)) return
+    if (!['Admin', 'Sales Manager', 'Finance'].includes(user?.role)) return
     const fetchPending = () => {
       api.get('/approvals?status=Pending')
         .then(r => setPendingCount(r.data.length))
@@ -75,7 +75,7 @@ export default function Layout() {
     return () => clearInterval(interval)
   }, [user?.role])
 
-  
+  // Global search with debounce
   useEffect(() => {
     if (searchQ.trim().length < 2) { setSearchResults(null); setSearchLoading(false); return }
     setSearchLoading(true)
@@ -103,14 +103,14 @@ export default function Layout() {
     ? (searchResults.contacts?.length ?? 0) + (searchResults.deals?.length ?? 0) + (searchResults.tasks?.length ?? 0)
     : 0
 
-  
+  // Fetch all orgs for super admin org switcher (only Admins with multiple orgs get it)
   useEffect(() => {
     if (user?.role !== 'Admin') return
     api.get('/organizations')
       .then(r => {
         if (r.data.length > 1) {
           setOrgs(r.data)
-          
+          // Default to first org if nothing stored
           if (!localStorage.getItem('crm_selected_org')) {
             const first = r.data[0]?.id
             if (first) { localStorage.setItem('crm_selected_org', first); setSelectedOrgId(first) }
@@ -123,11 +123,11 @@ export default function Layout() {
   function handleOrgChange(orgId) {
     localStorage.setItem('crm_selected_org', orgId)
     setSelectedOrgId(orgId)
-    
+    // Reload page so all data re-fetches under the new org context
     window.location.reload()
   }
 
-  
+  // #56 — keyboard shortcut: / → focus global search
   useEffect(() => {
     function onKey(e) {
       if (e.key !== '/') return
@@ -152,7 +152,7 @@ export default function Layout() {
 
   return (
     <div className="app-shell">
-      {}
+      {/* ── Sidebar ────────────────────────────────── */}
       <aside className={`sidebar${collapsed ? ' sidebar-collapsed' : ''}`}>
         <div
           className="sidebar-logo sidebar-logo-btn"
@@ -198,7 +198,7 @@ export default function Layout() {
         </div>
       </aside>
 
-      {}
+      {/* ── Main ───────────────────────────────────── */}
       <div className="main">
         <header className="topbar">
           <div className="topbar-breadcrumb">
@@ -327,6 +327,7 @@ export default function Layout() {
   )
 }
 
+/* ── Icons ──────────────────────────────────────────── */
 function IconGrid() {
   return (
     <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>

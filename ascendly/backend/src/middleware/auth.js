@@ -1,8 +1,14 @@
-
-
+// ══════════════════════════════════════
+//  Ascendly CRM — Auth & RBAC Middleware
+// ══════════════════════════════════════
 const jwt  = require('jsonwebtoken')
 const pool = require('../db/pool')
 
+/**
+ * Verifies the JWT in the Authorization header.
+ * Does a lightweight DB check for is_active + token_version (#39).
+ * Attaches decoded payload to req.user.
+ */
 async function authenticate(req, res, next) {
   const authHeader = req.headers['authorization']
   if (!authHeader || !authHeader.startsWith('Bearer '))
@@ -16,7 +22,7 @@ async function authenticate(req, res, next) {
     return res.status(401).json({ error: 'Token invalid or expired.' })
   }
 
-  
+  // #39 — check is_active and token_version for instant session revocation
   try {
     const { rows } = await pool.query(
       'SELECT is_active, token_version FROM employees WHERE id = $1',
@@ -30,9 +36,9 @@ async function authenticate(req, res, next) {
     return res.status(500).json({ error: 'Authentication check failed.' })
   }
 
-  req.user = payload 
+  req.user = payload // { id, org_id, email, role, tv }
 
-  
+  // Super admin org override: if X-Org-Id header is present and valid, use it
   if (isSuperAdmin({ user: payload })) {
     const selectedOrg = req.headers['x-org-id']
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -44,6 +50,13 @@ async function authenticate(req, res, next) {
   next()
 }
 
+/**
+ * Role-based access control guard.
+ * Usage: authorize("Admin", "Sales Manager")
+ *
+ * Permissions are enforced at the API layer independently
+ * of the frontend, as required by the SRS (Section 2.4).
+ */
 function authorize(...roles) {
   return (req, res, next) => {
     if (!req.user)
@@ -54,6 +67,10 @@ function authorize(...roles) {
   }
 }
 
+/**
+ * Returns true if the authenticated user is the designated super-admin.
+ * Determined by matching ADMIN_EMAIL env var.
+ */
 function isSuperAdmin(req) {
   return req.user?.email === process.env.ADMIN_EMAIL
 }

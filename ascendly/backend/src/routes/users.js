@@ -1,5 +1,6 @@
-
-
+// ══════════════════════════════════════
+//  Ascendly CRM — Users (Employees) Routes
+// ══════════════════════════════════════
 const router = require("express").Router();
 const bcrypt = require("bcryptjs");
 const pool   = require("../db/pool");
@@ -9,6 +10,7 @@ const { sendOk }     = require("../middleware/respond");
 
 const SALT_ROUNDS = 12;
 
+// #38 — password complexity validator
 function validatePassword(password) {
   if (!password || password.length < 8) return 'Password must be at least 8 characters.'
   if (!/[A-Z]/.test(password)) return 'Password must contain at least one uppercase letter.'
@@ -25,6 +27,8 @@ const USER_SELECT = `
   LEFT JOIN organizations o ON o.id = e.org_id
 `;
 
+// GET /api/users — readable by all org members (needed for owner/assignee dropdowns)
+// Super admin receives all users across all orgs; optional ?org_id= to filter
 router.get("/", authenticate, async (req, res, next) => {
   try {
     let query, params
@@ -47,6 +51,7 @@ router.get("/", authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// GET /api/users/:id
 router.get("/:id", authenticate, authorize("Admin"), async (req, res, next) => {
   try {
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -59,11 +64,12 @@ router.get("/:id", authenticate, authorize("Admin"), async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// POST /api/users
 router.post("/", authenticate, authorize("Admin"), async (req, res, next) => {
   try {
     let { org_id, name, email, phone, password, role } = req.body
-    
-    
+    // Non-super-admin can only create users in their own org
+    // Super admin defaults to selected org if not explicitly provided
     org_id = isSuperAdmin(req) ? (org_id || req.user.org_id) : req.user.org_id
     if (!org_id || !name || !email || !password || !role)
       return res.status(400).json({ error: "org_id, name, email, password, and role are required." })
@@ -86,16 +92,17 @@ router.post("/", authenticate, authorize("Admin"), async (req, res, next) => {
   }
 })
 
+// PATCH /api/users/:id
 router.patch("/:id", authenticate, authorize("Admin"), async (req, res, next) => {
   try {
-    
+    // Verify target user exists and belongs to same org (for non-super-admin)
     const { rows: existing } = await pool.query("SELECT org_id, email FROM employees WHERE id = $1", [req.params.id])
     if (!existing[0]) return res.status(404).json({ error: "User not found." })
     if (!isSuperAdmin(req) && existing[0].org_id !== req.user.org_id)
       return res.status(403).json({ error: "Forbidden." })
 
     const { name, email, phone, role, org_id, is_active } = req.body
-    
+    // Non-super-admin cannot change org assignment
     const targetOrgId = isSuperAdmin(req) ? (org_id ?? existing[0].org_id) : existing[0].org_id
 
     const { rows } = await pool.query(
@@ -118,6 +125,7 @@ router.patch("/:id", authenticate, authorize("Admin"), async (req, res, next) =>
   }
 })
 
+// POST /api/users/:id/reset-password
 router.post("/:id/reset-password", authenticate, authorize("Admin"), async (req, res, next) => {
   try {
     const { rows: existing } = await pool.query("SELECT org_id, email FROM employees WHERE id = $1", [req.params.id])
@@ -140,6 +148,7 @@ router.post("/:id/reset-password", authenticate, authorize("Admin"), async (req,
   } catch (err) { next(err) }
 })
 
+// DELETE /api/users/:id — soft delete
 router.delete("/:id", authenticate, authorize("Admin"), async (req, res, next) => {
   try {
     const { rows: existing } = await pool.query("SELECT org_id, email FROM employees WHERE id = $1", [req.params.id])
@@ -147,7 +156,7 @@ router.delete("/:id", authenticate, authorize("Admin"), async (req, res, next) =
     if (!isSuperAdmin(req) && existing[0].org_id !== req.user.org_id)
       return res.status(403).json({ error: "Forbidden." })
 
-    
+    // #39 — increment token_version to invalidate all existing JWTs for deactivated user
     await pool.query(
       "UPDATE employees SET is_active = FALSE, token_version = token_version + 1 WHERE id = $1",
       [req.params.id]

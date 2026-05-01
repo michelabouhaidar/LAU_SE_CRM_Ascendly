@@ -58,8 +58,10 @@ export default function DealDetail() {
   const [stages,       setStages]       = useState([])
   const [history,      setHistory]      = useState([])
   const [users,        setUsers]        = useState([])
-  const [comments,     setComments]     = useState([])
-  const [loading,      setLoading]      = useState(true)
+  const [comments,      setComments]      = useState([])
+  const [dealApprovals, setDealApprovals] = useState([])
+  const [valueHistory,  setValueHistory]  = useState([])
+  const [loading,       setLoading]       = useState(true)
   const [leftTab,      setLeftTab]      = useState('timeline')
 
   const [showInteraction,    setShowInteraction]    = useState(false)
@@ -72,7 +74,7 @@ export default function DealDetail() {
   const [showSaveTemplate,   setShowSaveTemplate]   = useState(false)
   const [cloning,            setCloning]            = useState(false)
 
-  
+  // Inline edit
   const [editingInfo, setEditingInfo] = useState(false)
   const [editForm,    setEditForm]    = useState({})
   const setEF = (k, v) => setEditForm(f => ({ ...f, [k]: v }))
@@ -133,7 +135,9 @@ export default function DealDetail() {
       api.get(`/deals/${id}/stage-history`).catch(() => ({ data: [] })),
       isManager ? api.get('/users').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
       api.get(`/deals/${id}/comments`).catch(() => ({ data: [] })),
-    ]).then(([d, i, t, s, h, u, c]) => {
+      api.get(`/deals/${id}/approval`).catch(() => ({ data: null })),
+      api.get(`/deals/${id}/value-history`).catch(() => ({ data: [] })),
+    ]).then(([d, i, t, s, h, u, c, ap, vh]) => {
       setDeal(d.data)
       setInteractions(i.data)
       setTasks(t.data.data ?? t.data)
@@ -141,6 +145,8 @@ export default function DealDetail() {
       setHistory(h.data)
       setUsers(u.data)
       setComments(c.data)
+      setDealApprovals(ap.data ?? [])
+      setValueHistory(vh.data)
     }).catch(() => navigate('/deals'))
       .finally(() => setLoading(false))
   }, [id, navigate, isManager])
@@ -173,7 +179,7 @@ export default function DealDetail() {
     } catch (e) {
       const msg = e.response?.data?.error ?? 'Failed to update stage.'
       setError(msg)
-      
+      // If it's a required-fields error and the edit form isn't open, auto-open it
       if (msg.includes('Required for this stage') && !editingInfo && canEdit && deal.status === 'Open') {
         startEdit()
       }
@@ -204,7 +210,7 @@ export default function DealDetail() {
 
   return (
     <div>
-      {}
+      {/* Header */}
       <div className="page-header">
         <div>
           <div style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 4 }}>
@@ -235,7 +241,7 @@ export default function DealDetail() {
           </div>
         </div>
         <div className="flex items-center gap-8" style={{ flexWrap: 'wrap' }}>
-          {}
+          {/* Clone & Save as Template — available to all who can edit */}
           {canEdit && (
             <button className="btn btn-ghost" onClick={cloneDeal} disabled={cloning}
               title="Create a copy of this deal at the first pipeline stage">
@@ -257,8 +263,8 @@ export default function DealDetail() {
               {canAssignSDR && (
                 <button className="btn btn-ghost" onClick={() => setShowAssign(true)}>Assign to Rep</button>
               )}
-              <button className="btn btn-outline" onClick={() => setShowLost(true)}>Mark Lost</button>
-              <button className="btn btn-primary" onClick={() => setShowWon(true)}>Mark Won ✓</button>
+              {!isSDR && <button className="btn btn-outline" onClick={() => setShowLost(true)}>Mark Lost</button>}
+              {!isSDR && <button className="btn btn-primary" onClick={() => setShowWon(true)}>Mark Won ✓</button>}
             </>
           )}
           {deal.status !== 'Open' && (
@@ -271,25 +277,57 @@ export default function DealDetail() {
         <div className="login-form-error" style={{ marginBottom: 16 }}>{error}</div>
       )}
 
-      {}
+      {/* Approval status banner — shows latest approval */}
+      {dealApprovals.length > 0 && (() => {
+        const latest = dealApprovals[dealApprovals.length - 1]
+        return (
+          <div style={{
+            marginBottom: 16, padding: '10px 16px', borderRadius: 8,
+            display: 'flex', alignItems: 'center', gap: 10, fontSize: 13,
+            background: latest.status === 'Pending'  ? 'var(--amber-bg, #fef3c7)'
+                      : latest.status === 'Approved' ? 'var(--green-bg, #dcfce7)'
+                      : '#fee2e2',
+            border: `1px solid ${
+              latest.status === 'Pending'  ? '#f59e0b'
+            : latest.status === 'Approved' ? 'var(--green-border, #86efac)'
+            : '#fca5a5'}`,
+            color: latest.status === 'Pending'  ? '#92400e'
+                 : latest.status === 'Approved' ? 'var(--green-text)'
+                 : '#991b1b',
+          }}>
+            <span style={{ fontWeight: 700 }}>
+              {latest.status === 'Pending'  ? '⏳ Approval Pending'
+             : latest.status === 'Approved' ? '✓ Approved'
+             : '✕ Rejected'}
+            </span>
+            <span style={{ opacity: 0.8 }}>
+              {latest.type}{latest.discount_pct ? ` · ${latest.discount_pct}% discount` : ''}
+              {' · '}Requested by {latest.requested_by_name}
+              {latest.decided_by_name ? ` · Decided by ${latest.decided_by_name}` : ''}
+            </span>
+          </div>
+        )
+      })()}
+
+      {/* Description banner */}
       {deal.description && <DescriptionBanner text={deal.description} />}
 
-      {}
+      {/* Stage progression */}
       {deal.status === 'Open' && (
         <div className="detail-section" style={{ marginBottom: 20 }}>
           <div className="detail-section-title">Pipeline Stage</div>
           <div className="stage-flow">
             {STAGES.filter(s => s !== 'Won' && s !== 'Lost').map((s, idx) => {
               const isCurrent = s === deal.stage_name
-              const isPast = idx < stageIndex
-              const isAllowed = allowedStages.includes(s) && !isCurrent
+              const isPast    = idx < stageIndex
+              const isAllowed = allowedStages.includes(s) && !isCurrent && !isPast
               return (
                 <button
                   key={s}
                   className={`stage-pill${isCurrent ? ' current' : ''}`}
                   disabled={!isAllowed || saving || !canEdit}
                   onClick={() => moveStage(s)}
-                  style={isPast ? { opacity: 0.5 } : {}}
+                  style={isPast ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
                 >
                   {isCurrent && '● '}{s}
                 </button>
@@ -299,9 +337,9 @@ export default function DealDetail() {
         </div>
       )}
 
-      {}
+      {/* Main content */}
       <div className="detail-grid">
-        {}
+        {/* Left column: tabs */}
         <div>
           <div className="admin-tab-bar" style={{ marginBottom: 14 }}>
             {[
@@ -317,7 +355,7 @@ export default function DealDetail() {
             ))}
           </div>
 
-          {}
+          {/* Comments tab #50 + #54 */}
           {leftTab === 'comments' && (
             <CommentsPanel
               dealId={id}
@@ -328,19 +366,22 @@ export default function DealDetail() {
             />
           )}
 
-          {}
+          {/* Timeline tab */}
           {leftTab === 'timeline' && (
             <DealTimeline
               deal={deal}
               history={history}
               interactions={interactions}
               tasks={tasks}
+              comments={comments}
+              approvals={dealApprovals}
+              valueHistory={valueHistory}
               fmtDate={fmtDate}
               fmtDateTime={fmtDateTime}
             />
           )}
 
-          {}
+          {/* Interactions tab */}
           {leftTab === 'interactions' && (
             <div className="card">
               <div className="card-header">
@@ -373,7 +414,7 @@ export default function DealDetail() {
             </div>
           )}
 
-          {}
+          {/* Tasks tab */}
           {leftTab === 'tasks' && (
             <div className="card">
               <div className="card-header">
@@ -418,7 +459,7 @@ export default function DealDetail() {
             </div>
           )}
 
-          {}
+          {/* Stage History tab */}
           {leftTab === 'history' && (
             <div className="card" style={{ padding: '20px' }}>
               <div className="card-title" style={{ marginBottom: 20 }}>Stage History</div>
@@ -461,7 +502,7 @@ export default function DealDetail() {
           )}
         </div>
 
-        {}
+        {/* Right column: deal info */}
         <div>
           <div className="detail-section">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -592,7 +633,7 @@ export default function DealDetail() {
         </div>
       </div>
 
-      {}
+      {/* Modals */}
       {showInteraction && (
         <LogInteractionModal dealId={id} onClose={() => setShowInteraction(false)} onSaved={() => { setShowInteraction(false); load() }} />
       )}
@@ -622,13 +663,14 @@ export default function DealDetail() {
   )
 }
 
+/* ── Comments Panel (#50 + #54) ────────────────────── */
 function CommentsPanel({ dealId, comments, users, currentUser, onRefresh }) {
   const [body, setBody] = useState('')
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState('')
   const textareaRef = useRef(null)
 
-  
+  // #54 — parse @Name mentions and highlight them
   function renderBody(text) {
     const parts = text.split(/(@\w[\w\s]*?\w(?=\s|$|[^a-zA-Z]))/g)
     return parts.map((part, i) =>
@@ -638,7 +680,7 @@ function CommentsPanel({ dealId, comments, users, currentUser, onRefresh }) {
     )
   }
 
-  
+  // #54 — extract @mentions from body, match against users
   function extractMentions(text) {
     const matches = text.match(/@(\w[\w ]*?\w)(?=\s|$)/g) ?? []
     return matches.flatMap(m => {
@@ -755,8 +797,13 @@ function CommentsPanel({ dealId, comments, users, currentUser, onRefresh }) {
   )
 }
 
+/* ── Log Interaction Modal ────────────────────────── */
 function LogInteractionModal({ dealId, onClose, onSaved }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const nowTime = new Date().toTimeString().slice(0, 5)
   const [form, setForm] = useState({ type: 'Call', summary: '', next_step: '', occurred_at: '' })
+  const [occDate, setOccDate] = useState(today)
+  const [occTime, setOccTime] = useState(nowTime)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -766,7 +813,8 @@ function LogInteractionModal({ dealId, onClose, onSaved }) {
     setError('')
     setSaving(true)
     try {
-      await api.post(`/deals/${dealId}/interactions`, form)
+      const occurred_at = occDate ? `${occDate}T${occTime || '00:00'}` : ''
+      await api.post(`/deals/${dealId}/interactions`, { ...form, occurred_at })
       onSaved()
     } catch (err) {
       setError(err.response?.data?.error ?? 'Failed to log interaction.')
@@ -786,7 +834,12 @@ function LogInteractionModal({ dealId, onClose, onSaved }) {
         </div>
         <div className="input-group">
           <label className="input-label">Date & Time</label>
-          <input className="input" type="datetime-local" value={form.occurred_at} onChange={e => set('occurred_at', e.target.value)} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="input" type="date" value={occDate}
+              onChange={e => setOccDate(e.target.value)} style={{ flex: 1 }} />
+            <input className="input" type="time" value={occTime}
+              onChange={e => setOccTime(e.target.value)} style={{ width: 110 }} />
+          </div>
         </div>
         <div className="input-group">
           <label className="input-label">Summary *</label>
@@ -808,6 +861,7 @@ function LogInteractionModal({ dealId, onClose, onSaved }) {
   )
 }
 
+/* ── Mark Won Modal ──────────────────────────────── */
 function MarkWonModal({ dealId, onClose, onSaved }) {
   const [form, setForm] = useState({ final_value: '', contract_date: '' })
   const [saving, setSaving] = useState(false)
@@ -850,6 +904,7 @@ function MarkWonModal({ dealId, onClose, onSaved }) {
   )
 }
 
+/* ── Mark Lost Modal ─────────────────────────────── */
 function MarkLostModal({ dealId, onClose, onSaved }) {
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
@@ -892,6 +947,7 @@ function MarkLostModal({ dealId, onClose, onSaved }) {
   )
 }
 
+/* ── Request Approval Modal ──────────────────────── */
 function ApprovalModal({ dealId, onClose, onSaved }) {
   const [form, setForm] = useState({ type: 'Discount', discount_pct: '', justification: '' })
   const [saving, setSaving] = useState(false)
@@ -943,6 +999,7 @@ function ApprovalModal({ dealId, onClose, onSaved }) {
   )
 }
 
+/* ── Add Task Modal ───────────────────────────────── */
 function AddTaskModal({ dealId, onClose, onSaved }) {
   const [form, setForm] = useState({ title: '', type: 'Call', due_date: '' })
   const [saving, setSaving] = useState(false)
@@ -993,6 +1050,7 @@ function AddTaskModal({ dealId, onClose, onSaved }) {
   )
 }
 
+/* ── Reassign Modal (Manager/Admin) ─────────────── */
 function ReassignModal({ dealId, users, currentOwnerId, onClose, onSaved }) {
   const [ownerId, setOwnerId] = useState(currentOwnerId)
   const [saving, setSaving] = useState(false)
@@ -1035,6 +1093,7 @@ function ReassignModal({ dealId, users, currentOwnerId, onClose, onSaved }) {
   )
 }
 
+/* ── Assign to Sales Rep Modal (SDR) ────────────── */
 function AssignToRepModal({ dealId, onClose, onSaved }) {
   const [reps, setReps] = useState([])
   const [ownerId, setOwnerId] = useState('')
@@ -1085,6 +1144,7 @@ function AssignToRepModal({ dealId, onClose, onSaved }) {
   )
 }
 
+/* ── Save as Template Modal ───────────────────────── */
 function SaveTemplateModal({ deal, onClose, onSaved }) {
   const [name,    setName]    = useState(`${deal.title} template`)
   const [saving,  setSaving]  = useState(false)
@@ -1134,6 +1194,7 @@ function SaveTemplateModal({ deal, onClose, onSaved }) {
   )
 }
 
+/* ── Deal Timeline ────────────────────────────────── */
 const TL_ICON = {
   created: (
     <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -1157,11 +1218,11 @@ const TL_ICON = {
   ),
 }
 
-const TYPE_LABELS = { created: 'Deal', stage: 'Stage', interaction: 'Interaction', task: 'Task' }
-const TYPE_BG     = { created: '#22C55E', stage: '#8B5CF6', interaction: '#3B82F6', task: '#F59E0B' }
+const TYPE_LABELS = { created: 'Deal', stage: 'Stage', interaction: 'Interaction', task: 'Task', comment: 'Comment', approval: 'Approval', value: 'Value' }
+const TYPE_BG     = { created: '#22C55E', stage: '#8B5CF6', interaction: '#3B82F6', task: '#F59E0B', comment: '#64748b', approval: '#ec4899', value: '#14B8A6' }
 
-function DealTimeline({ deal, history, interactions, tasks, fmtDate, fmtDateTime }) {
-  
+function DealTimeline({ deal, history, interactions, tasks, comments, approvals, valueHistory, fmtDate, fmtDateTime }) {
+  // Build unified events
   const events = []
 
   events.push({
@@ -1195,6 +1256,50 @@ function DealTimeline({ deal, history, interactions, tasks, fmtDate, fmtDateTime
     })
   })
 
+  ;(comments ?? []).forEach(c => {
+    events.push({
+      type: 'comment',
+      ts: c.created_at,
+      label: 'Comment posted',
+      sub: c.body?.slice(0, 80) + (c.body?.length > 80 ? '…' : ''),
+      byLine: c.author_name,
+      color: '#64748b',
+    })
+  })
+
+  ;(approvals ?? []).forEach(a => {
+    events.push({
+      type: 'approval',
+      ts: a.request_date,
+      label: `Approval requested · ${a.type}${a.discount_pct ? ` (${a.discount_pct}% discount)` : ''}`,
+      sub: a.justification ?? '',
+      byLine: a.requested_by_name,
+      color: '#ec4899',
+    })
+    if (a.decision_date) {
+      events.push({
+        type: 'approval',
+        ts: a.decision_date,
+        label: `Approval ${a.status.toLowerCase()} · ${a.type}`,
+        sub: '',
+        byLine: a.decided_by_name,
+        color: a.status === 'Approved' ? '#22C55E' : '#ef4444',
+      })
+    }
+  })
+
+  ;(valueHistory ?? []).forEach(v => {
+    const fmt = (n) => n != null ? `$${Number(n).toLocaleString()}` : '—'
+    events.push({
+      type: 'value',
+      ts: v.changed_at,
+      label: `Value changed · ${fmt(v.old_value)} → ${fmt(v.new_value)}`,
+      sub: '',
+      byLine: v.changed_by_name,
+      color: '#14B8A6',
+    })
+  })
+
   tasks.forEach(t => {
     const overdue = t.due_date && t.status !== 'Done' && new Date(t.due_date) < new Date()
     events.push({
@@ -1209,7 +1314,7 @@ function DealTimeline({ deal, history, interactions, tasks, fmtDate, fmtDateTime
     })
   })
 
-  
+  // Sort chronologically desc, null dates last
   events.sort((a, b) => {
     if (!a.ts && !b.ts) return 0
     if (!a.ts) return 1
@@ -1219,7 +1324,7 @@ function DealTimeline({ deal, history, interactions, tasks, fmtDate, fmtDateTime
 
   return (
     <div className="card" style={{ padding: 20 }}>
-      {}
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <span className="card-title">Activity Timeline</span>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -1232,10 +1337,10 @@ function DealTimeline({ deal, history, interactions, tasks, fmtDate, fmtDateTime
         </div>
       </div>
 
-      {}
+      {/* Timeline entries */}
       {events.length > 0 && (
       <div style={{ position: 'relative', paddingLeft: 40 }}>
-        {}
+        {/* Vertical rail */}
         <div style={{
           position: 'absolute', left: 13, top: 14, bottom: 14,
           width: 2, background: 'var(--border)',
@@ -1246,7 +1351,7 @@ function DealTimeline({ deal, history, interactions, tasks, fmtDate, fmtDateTime
             position: 'relative', marginBottom: idx < events.length - 1 ? 20 : 0,
             display: 'flex', gap: 16, alignItems: 'flex-start',
           }}>
-            {}
+            {/* Icon node */}
             <div style={{
               position: 'absolute', left: -40,
               width: 28, height: 28, borderRadius: '50%',
@@ -1260,7 +1365,7 @@ function DealTimeline({ deal, history, interactions, tasks, fmtDate, fmtDateTime
               {TL_ICON[ev.type]}
             </div>
 
-            {}
+            {/* Card */}
             <div style={{
               flex: 1,
               background: 'var(--bg-2)',
@@ -1271,7 +1376,7 @@ function DealTimeline({ deal, history, interactions, tasks, fmtDate, fmtDateTime
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {}
+                  {/* Type badge */}
                   <span style={{
                     fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em',
                     padding: '1px 6px', borderRadius: 4,

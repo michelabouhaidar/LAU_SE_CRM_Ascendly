@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 
 export default function Modal({ title, onClose, children, width = 480 }) {
-  
+  // Close on Escape key
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handler)

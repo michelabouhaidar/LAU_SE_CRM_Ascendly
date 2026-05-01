@@ -1,14 +1,16 @@
-
-
+// ══════════════════════════════════════
+//  Ascendly CRM — Reports Routes
+// ══════════════════════════════════════
 const router = require('express').Router()
 const pool   = require('../db/pool')
 const { authenticate, authorize } = require('../middleware/auth')
 const cache  = require('../utils/cache')
 
-const DASHBOARD_TTL = 30_000  
+const DASHBOARD_TTL = 30_000  // 30 s — tolerable staleness for summary dashboards
 
 const ALLOWED = ['Admin', 'Sales Manager', 'Finance']
 
+// GET /api/reports/revenue
 router.get('/revenue', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const { date_from, date_to, owner_id } = req.query
@@ -34,6 +36,7 @@ router.get('/revenue', authenticate, authorize(...ALLOWED), async (req, res, nex
   }
 })
 
+// GET /api/reports/pipeline
 router.get('/pipeline', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const owner_id = req.query.owner_id || null
@@ -57,6 +60,7 @@ router.get('/pipeline', authenticate, authorize(...ALLOWED), async (req, res, ne
   }
 })
 
+// GET /api/reports/leaderboard
 router.get('/leaderboard', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const { date_from, date_to, owner_id } = req.query
@@ -94,6 +98,7 @@ router.get('/leaderboard', authenticate, authorize(...ALLOWED), async (req, res,
   }
 })
 
+// GET /api/reports/monthly
 router.get('/monthly', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const params = [req.user.org_id]
@@ -109,6 +114,7 @@ router.get('/monthly', authenticate, authorize(...ALLOWED), async (req, res, nex
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/forecast — Σ(Expected Value × Probability) for Finance
 router.get('/forecast', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const { rows: emp } = await pool.query(
@@ -128,6 +134,7 @@ router.get('/forecast', authenticate, authorize(...ALLOWED), async (req, res, ne
   }
 })
 
+// GET /api/reports/conversion — Win rate for Sales Manager dashboard
 router.get('/conversion', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const { rows: emp } = await pool.query(
@@ -151,6 +158,7 @@ router.get('/conversion', authenticate, authorize(...ALLOWED), async (req, res, 
   }
 })
 
+// GET /api/reports/search?q= — Global search across contacts, deals, tasks
 router.get('/search', authenticate, async (req, res, next) => {
   try {
     const q = `%${(req.query.q || '').toLowerCase()}%`
@@ -190,6 +198,7 @@ router.get('/search', authenticate, async (req, res, next) => {
   }
 })
 
+// GET /api/reports/win-loss-monthly — won & lost counts per month
 router.get('/win-loss-monthly', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const { rows: emp } = await pool.query(
@@ -236,6 +245,7 @@ router.get('/win-loss-monthly', authenticate, authorize(...ALLOWED), async (req,
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/lead-source-revenue — won revenue broken down by contact lead source
 router.get('/lead-source-revenue', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const { rows: emp } = await pool.query(
@@ -261,6 +271,8 @@ router.get('/lead-source-revenue', authenticate, authorize(...ALLOWED), async (r
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/stage-velocity — avg days deals spend in each stage before advancing
+// Rewritten from LATERAL subquery to LEAD() window function: O(n log n) vs O(n²)
 router.get('/stage-velocity', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
@@ -285,6 +297,7 @@ router.get('/stage-velocity', authenticate, authorize(...ALLOWED), async (req, r
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/deal-cycle — avg days won vs lost
 router.get('/deal-cycle', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const owner_id = req.query.owner_id || null
@@ -301,6 +314,8 @@ router.get('/deal-cycle', authenticate, authorize(...ALLOWED), async (req, res, 
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/stage-conversion — % advancing per stage
+// Rewritten from LATERAL subquery to LEAD() window function via CTE: O(n log n) vs O(n²)
 router.get('/stage-conversion', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const owner_id = req.query.owner_id || null
@@ -329,6 +344,7 @@ router.get('/stage-conversion', authenticate, authorize(...ALLOWED), async (req,
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/rep-pipeline — pipeline per rep
 router.get('/rep-pipeline', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const stage = req.query.stage || null
@@ -348,6 +364,7 @@ router.get('/rep-pipeline', authenticate, authorize(...ALLOWED), async (req, res
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/interaction-types
 router.get('/interaction-types', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const owner_id = req.query.owner_id || null
@@ -361,6 +378,7 @@ router.get('/interaction-types', authenticate, authorize(...ALLOWED), async (req
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/approval-stats
 router.get('/approval-stats', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
@@ -372,6 +390,7 @@ router.get('/approval-stats', authenticate, authorize(...ALLOWED), async (req, r
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/deal-size-buckets
 router.get('/deal-size-buckets', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
@@ -389,6 +408,7 @@ router.get('/deal-size-buckets', authenticate, authorize(...ALLOWED), async (req
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/monthly-created
 router.get('/monthly-created', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const owner_id = req.query.owner_id || null
@@ -403,6 +423,7 @@ router.get('/monthly-created', authenticate, authorize(...ALLOWED), async (req, 
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/task-completion-by-rep
 router.get('/task-completion-by-rep', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const owner_id = req.query.owner_id || null
@@ -418,6 +439,7 @@ router.get('/task-completion-by-rep', authenticate, authorize(...ALLOWED), async
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/my-stats — personal stats, no role restriction
 router.get('/my-stats', authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
@@ -432,6 +454,7 @@ router.get('/my-stats', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/my-monthly — personal monthly trend, no role restriction
 router.get('/my-monthly', authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
@@ -443,6 +466,7 @@ router.get('/my-monthly', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/contact-growth — contacts created per month for last 12 months
 router.get('/contact-growth', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
@@ -455,6 +479,7 @@ router.get('/contact-growth', authenticate, authorize(...ALLOWED), async (req, r
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/deal-age-buckets — open deals grouped by age (days since created_at)
 router.get('/deal-age-buckets', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
@@ -480,6 +505,7 @@ router.get('/deal-age-buckets', authenticate, authorize(...ALLOWED), async (req,
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/revenue-by-month-rep — monthly revenue breakdown per rep (last 6 months)
 router.get('/revenue-by-month-rep', authenticate, authorize(...ALLOWED), async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
@@ -496,12 +522,17 @@ router.get('/revenue-by-month-rep', authenticate, authorize(...ALLOWED), async (
   } catch (err) { next(err) }
 })
 
+// ── Combined dashboard endpoints ────────────────────────────
+// Bundles all sub-queries into one HTTP round trip, running them
+// in parallel server-side. Reduces 15 client→server calls to 1.
+
+// GET /api/reports/team-summary — TeamDashboard (Admin / Sales Manager)
 router.get('/team-summary', authenticate, authorize('Admin', 'Sales Manager'), async (req, res, next) => {
   try {
     const org      = req.user.org_id
     const owner_id = req.query.owner_id || null
-    const q_owner  = owner_id ? `AND d.owner_id = '${owner_id}'::uuid` : ''   
-    
+    const q_owner  = owner_id ? `AND d.owner_id = '${owner_id}'::uuid` : ''   // safe: validated below
+    // owner_id safety: reject non-uuid values
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     if (owner_id && !UUID_RE.test(owner_id))
       return res.status(400).json({ error: 'Invalid owner_id.' })
@@ -516,12 +547,12 @@ router.get('/team-summary', authenticate, authorize('Admin', 'Sales Manager'), a
       repPipeline, monthlyCreated, interactions, approvals, taskByRep, taskCount,
     ] = await Promise.all([
 
-      
+      // 1 — revenue totals
       pool.query(`SELECT COUNT(*)::int AS total_won, SUM(final_value) AS total_revenue,
                          AVG(final_value) AS avg_deal_value, MAX(final_value) AS max_deal_value
                   FROM deals WHERE status='Won' AND org_id=$1 AND deleted_at IS NULL`, [org]),
 
-      
+      // 2 — open deals list (first 8 for the widget)
       pool.query(`SELECT d.id, d.deal_number, d.title, d.expected_value, d.stage_id,
                          sc.name AS stage_name, e.name AS owner_name, d.owner_id
                   FROM deals d
@@ -530,7 +561,7 @@ router.get('/team-summary', authenticate, authorize('Admin', 'Sales Manager'), a
                   WHERE d.org_id=$1 AND d.status='Open' AND d.deleted_at IS NULL ${q_owner}
                   ORDER BY d.updated_at DESC LIMIT 8`, [org]),
 
-      
+      // 3 — open/overdue task counts + first 8
       pool.query(`SELECT t.id, t.title, t.status, t.due_date, t.type, t.assigned_to,
                          e2.name AS assigned_to_name
                   FROM tasks t
@@ -539,17 +570,17 @@ router.get('/team-summary', authenticate, authorize('Admin', 'Sales Manager'), a
                   WHERE t.status != 'Done'
                   ORDER BY t.due_date ASC NULLS LAST LIMIT 8`, [org]),
 
-      
+      // 4 — contacts count
       pool.query(`SELECT COUNT(*)::int AS count FROM contacts WHERE org_id=$1 AND deleted_at IS NULL`, [org]),
 
-      
+      // 5 — win/loss conversion
       pool.query(`SELECT ROUND(COUNT(*) FILTER (WHERE status='Won')::numeric /
                     NULLIF(COUNT(*) FILTER (WHERE status IN ('Won','Lost')),0)*100,1) AS win_rate_pct,
                     COUNT(*) FILTER (WHERE status='Won')::int AS won_count,
                     COUNT(*) FILTER (WHERE status='Lost')::int AS lost_count
                   FROM deals WHERE org_id=$1 AND deleted_at IS NULL`, [org]),
 
-      
+      // 6 — pipeline by stage
       pool.query(`SELECT sc.name AS stage, sc.position,
                     COUNT(d.id)::int AS deal_count,
                     COALESCE(SUM(d.expected_value),0) AS total_expected_value,
@@ -561,13 +592,13 @@ router.get('/team-summary', authenticate, authorize('Admin', 'Sales Manager'), a
                   WHERE sc.is_terminal=false OR sc.position=1
                   GROUP BY sc.id,sc.name,sc.position ORDER BY sc.position`, [org]),
 
-      
+      // 7 — monthly revenue (last 6 mo)
       pool.query(`SELECT TO_CHAR(d.contract_date,'YYYY-MM') AS month, SUM(d.final_value) AS revenue
                   FROM deals d WHERE d.status='Won' AND d.org_id=$1 AND d.deleted_at IS NULL ${q_owner}
                     AND d.contract_date IS NOT NULL
                   GROUP BY month ORDER BY month DESC LIMIT 6`, [org]),
 
-      
+      // 8 — leaderboard top 5
       pool.query(`SELECT e.id, e.name,
                     COUNT(d.id) FILTER (WHERE d.status='Won')::int AS won_count,
                     COALESCE(SUM(d.final_value) FILTER (WHERE d.status='Won'),0) AS revenue_won,
@@ -577,7 +608,7 @@ router.get('/team-summary', authenticate, authorize('Admin', 'Sales Manager'), a
                   WHERE e.role IN ('Sales Rep','SDR') AND e.org_id=$1
                   GROUP BY e.id,e.name ORDER BY revenue_won DESC LIMIT 5`, [org]),
 
-      
+      // 9 — deal cycle
       pool.query(`SELECT
                     ROUND(AVG(EXTRACT(EPOCH FROM(contract_date::TIMESTAMPTZ-created_at))/86400)
                       FILTER (WHERE status='Won')::numeric,1) AS avg_won_days,
@@ -587,7 +618,7 @@ router.get('/team-summary', authenticate, authorize('Admin', 'Sales Manager'), a
                       FILTER (WHERE status='Lost')::numeric,1) AS avg_lost_days
                   FROM deals d WHERE status IN ('Won','Lost') AND org_id=$1 AND deleted_at IS NULL ${q_owner}`, [org]),
 
-      
+      // 10 — stage conversion (window fn version)
       pool.query(`WITH dm AS (
                     SELECT dsh.deal_id, dsh.to_stage,
                            LEAD(dsh.moved_at) OVER (PARTITION BY dsh.deal_id ORDER BY dsh.moved_at) AS next_move
@@ -602,7 +633,7 @@ router.get('/team-summary', authenticate, authorize('Admin', 'Sales Manager'), a
                   FROM dm JOIN stage_catalog sc ON sc.id=dm.to_stage AND sc.is_terminal=false
                   GROUP BY sc.name,sc.position ORDER BY sc.position`, [org]),
 
-      
+      // 11 — rep pipeline
       pool.query(`SELECT e.id, e.name,
                     COUNT(d.id) FILTER (WHERE d.status='Open')::int AS open_count,
                     COALESCE(SUM(d.expected_value) FILTER (WHERE d.status='Open'),0) AS pipeline_value,
@@ -612,27 +643,27 @@ router.get('/team-summary', authenticate, authorize('Admin', 'Sales Manager'), a
                   WHERE e.role IN ('Sales Rep','SDR') AND e.org_id=$1
                   GROUP BY e.id,e.name ORDER BY pipeline_value DESC`, [org]),
 
-      
+      // 12 — monthly created vs won (last 6 mo)
       pool.query(`SELECT TO_CHAR(d.created_at,'YYYY-MM') AS month,
                     COUNT(*)::int AS created,
                     COUNT(*) FILTER (WHERE d.status='Won')::int AS won
                   FROM deals d WHERE d.org_id=$1 AND d.deleted_at IS NULL ${q_owner}
                   GROUP BY month ORDER BY month DESC LIMIT 6`, [org]),
 
-      
+      // 13 — interaction types
       pool.query(`SELECT i.type, COUNT(*)::int AS count
                   FROM interactions i
                   JOIN deals d ON d.id=i.deal_id AND d.org_id=$1 AND d.deleted_at IS NULL ${q_owner}
                   GROUP BY i.type ORDER BY count DESC`, [org]),
 
-      
+      // 14 — approval stats
       pool.query(`SELECT a.status, COUNT(*)::int AS count,
                     ROUND(AVG(a.discount_pct)::numeric,1) AS avg_discount
                   FROM approvals a
                   JOIN deals d ON d.id=a.deal_id AND d.org_id=$1 AND d.deleted_at IS NULL
                   GROUP BY a.status ORDER BY CASE a.status WHEN 'Approved' THEN 1 WHEN 'Pending' THEN 2 ELSE 3 END`, [org]),
 
-      
+      // 15 — task completion by rep
       pool.query(`SELECT e.id, e.name,
                     COUNT(t.id) FILTER (WHERE t.status='Done')::int AS done,
                     COUNT(t.id) FILTER (WHERE t.status!='Done')::int AS open
@@ -640,14 +671,14 @@ router.get('/team-summary', authenticate, authorize('Admin', 'Sales Manager'), a
                   WHERE e.role IN ('Sales Rep','SDR') AND e.org_id=$1
                   GROUP BY e.id,e.name ORDER BY done DESC`, [org]),
 
-      
+      // 16 — total open task count across the org
       pool.query(`SELECT COUNT(*)::int AS count
                   FROM tasks t
                   JOIN employees e ON e.id=t.created_by AND e.org_id=$1
                   WHERE t.status != 'Done'`, [org]),
     ])
 
-    
+    // Compute overdue count from task list
     const now = new Date()
     const overdueCount = openTasks.rows.filter(t =>
       t.due_date && new Date(t.due_date) < now
@@ -680,6 +711,7 @@ router.get('/team-summary', authenticate, authorize('Admin', 'Sales Manager'), a
   } catch (err) { next(err) }
 })
 
+// GET /api/reports/personal-summary — PersonalDashboard (Sales Rep / SDR)
 router.get('/personal-summary', authenticate, async (req, res, next) => {
   try {
     const uid = req.user.id
@@ -691,14 +723,14 @@ router.get('/personal-summary', authenticate, async (req, res, next) => {
 
     const [myDeals, myTasks, contacts, myStats, myMonthly, myTaskCounts] = await Promise.all([
 
-      
+      // 1 — my open deals
       pool.query(`SELECT d.id, d.deal_number, d.title, d.expected_value, d.owner_id,
                          sc.name AS stage_name
                   FROM deals d JOIN stage_catalog sc ON sc.id=d.stage_id
                   WHERE d.owner_id=$1 AND d.status='Open' AND d.deleted_at IS NULL
                   ORDER BY d.updated_at DESC`, [uid]),
 
-      
+      // 2 — my tasks (open)
       pool.query(`SELECT t.id, t.title, t.status, t.due_date, t.type,
                          e2.name AS assigned_to_name, t.assigned_to
                   FROM tasks t
@@ -707,10 +739,10 @@ router.get('/personal-summary', authenticate, async (req, res, next) => {
                   WHERE t.assigned_to=$1 AND t.status!='Done'
                   ORDER BY t.due_date ASC NULLS LAST`, [uid, org]),
 
-      
+      // 3 — org contacts count
       pool.query(`SELECT COUNT(*)::int AS count FROM contacts WHERE org_id=$1 AND deleted_at IS NULL`, [org]),
 
-      
+      // 4 — my personal stats
       pool.query(`SELECT COUNT(*) FILTER (WHERE status='Won')::int AS won,
                     COUNT(*) FILTER (WHERE status='Lost')::int AS lost,
                     COUNT(*) FILTER (WHERE status='Open')::int AS open,
@@ -721,12 +753,12 @@ router.get('/personal-summary', authenticate, async (req, res, next) => {
                       FILTER (WHERE status='Won')::numeric,1) AS avg_cycle_days
                   FROM deals WHERE owner_id=$1 AND deleted_at IS NULL`, [uid]),
 
-      
+      // 5 — my monthly revenue (last 6 mo)
       pool.query(`SELECT TO_CHAR(contract_date,'YYYY-MM') AS month, COUNT(*)::int AS won, SUM(final_value) AS revenue
                   FROM deals WHERE owner_id=$1 AND status='Won' AND contract_date IS NOT NULL AND deleted_at IS NULL
                   GROUP BY month ORDER BY month DESC LIMIT 6`, [uid]),
 
-      
+      // 6 — my task counts (open + done)
       pool.query(`SELECT
                     COUNT(*) FILTER (WHERE status!='Done')::int AS open_count,
                     COUNT(*) FILTER (WHERE status='Done')::int AS done_count

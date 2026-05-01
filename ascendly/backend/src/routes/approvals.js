@@ -1,5 +1,6 @@
-
-
+// ══════════════════════════════════════
+//  Ascendly CRM — Approvals Routes
+// ══════════════════════════════════════
 const router = require('express').Router()
 const pool   = require('../db/pool')
 const { authenticate, authorize } = require('../middleware/auth')
@@ -23,6 +24,7 @@ const APPROVAL_SELECT = `
   JOIN deals d ON d.id = a.deal_id
 `
 
+// GET /api/approvals
 router.get('/', authenticate, authorize('Admin', 'Sales Manager', 'Finance'), async (req, res, next) => {
   try {
     const { status } = req.query
@@ -42,6 +44,7 @@ router.get('/', authenticate, authorize('Admin', 'Sales Manager', 'Finance'), as
   }
 })
 
+// GET /api/approvals/:id
 router.get('/:id', authenticate, authorize('Admin', 'Sales Manager', 'Finance'), async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -55,20 +58,21 @@ router.get('/:id', authenticate, authorize('Admin', 'Sales Manager', 'Finance'),
   }
 })
 
+// POST /api/approvals — SDR removed per SRS §3.2.4 restrictions
 router.post('/', authenticate, authorize('Admin', 'Sales Manager', 'Sales Rep'), async (req, res, next) => {
   try {
     const { deal_id, type, discount_pct, justification } = req.body
     if (!deal_id || !type)
       return res.status(400).json({ error: 'deal_id and type are required.' })
 
-    
+    // Verify deal belongs to the requester's org
     const { rows: dealCheck } = await pool.query(
       `SELECT id FROM deals WHERE id = $1 AND org_id = $2`,
       [deal_id, req.user.org_id]
     )
     if (!dealCheck[0]) return res.status(404).json({ error: 'Deal not found.' })
 
-    
+    // Duplicate guard: no pending approval for same deal
     const { rows: existing } = await pool.query(
       `SELECT id FROM approvals WHERE deal_id = $1 AND status = 'Pending' LIMIT 1`,
       [deal_id]
@@ -92,13 +96,14 @@ router.post('/', authenticate, authorize('Admin', 'Sales Manager', 'Sales Rep'),
   }
 })
 
+// PATCH /api/approvals/:id  — Sales Manager / Admin decide
 router.patch('/:id', authenticate, authorize('Admin', 'Sales Manager'), async (req, res, next) => {
   try {
     const { status } = req.body
     if (!status || !['Approved', 'Rejected'].includes(status))
       return res.status(400).json({ error: "status must be 'Approved' or 'Rejected'." })
 
-    
+    // Fetch approval — scoped to org via deal join
     const { rows: existing } = await pool.query(
       `SELECT a.*, d.title AS deal_title, d.deal_number, d.owner_id AS deal_owner_id
        FROM approvals a
@@ -110,12 +115,12 @@ router.patch('/:id', authenticate, authorize('Admin', 'Sales Manager'), async (r
     if (existing[0].status !== 'Pending')
       return res.status(409).json({ error: 'Approval already decided.' })
 
-    
+    // Self-approval guard: block the requester from deciding their own request
     if (existing[0].requested_by === req.user.id)
       return res.status(403).json({ error: 'You cannot approve or reject your own approval request.' })
 
-    
-    
+    // Deal-owner guard: block the deal owner from deciding approvals on their own deal
+    // (prevents a manager from requesting via a rep account then approving as themselves)
     if (existing[0].deal_owner_id === req.user.id)
       return res.status(403).json({ error: 'The deal owner cannot approve or reject approval requests on their own deal.' })
 

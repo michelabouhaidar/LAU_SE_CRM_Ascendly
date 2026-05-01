@@ -51,7 +51,7 @@ export default function Login() {
   return (
     <div className="login-page">
 
-      {}
+      {/* ── Left panel ───────────────────────────────── */}
       <div className="login-left">
         <div className="login-left-top">
           <div className="login-brand">
@@ -72,7 +72,7 @@ export default function Login() {
         </div>
       </div>
 
-      {}
+      {/* ── Right panel ──────────────────────────────── */}
       <div className="login-right">
         <div className="login-right-topbar">
           <button className="login-back-btn" onClick={() => navigate('/')}>

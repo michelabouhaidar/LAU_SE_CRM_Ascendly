@@ -1,5 +1,6 @@
-
-
+// ══════════════════════════════════════
+//  Ascendly CRM — Pipeline Stages Routes
+// ══════════════════════════════════════
 const router = require('express').Router()
 const pool   = require('../db/pool')
 const { authenticate, authorize, isSuperAdmin } = require('../middleware/auth')
@@ -11,6 +12,9 @@ function requireSuperAdmin(req, res, next) {
 const { writeAudit } = require('../middleware/audit')
 const { sendOk }     = require('../middleware/respond')
 
+// GET /api/pipeline-stages
+// Returns all catalog stages with is_active flag + required_fields for the user's org.
+// 'New' (position=1) is always returned as active regardless of the toggle.
 router.get('/', authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -28,7 +32,7 @@ router.get('/', authenticate, async (req, res, next) => {
        ORDER BY sc.position ASC`,
       [req.user.org_id]
     )
-    
+    // New stage is always active
     const result = rows.map(r => ({
       ...r,
       is_active: r.position === 1 ? true : r.is_active,
@@ -39,9 +43,11 @@ router.get('/', authenticate, async (req, res, next) => {
   }
 })
 
+// PATCH /api/pipeline-stages/:id/toggle — org Admin only
+// Activates or deactivates a stage for the org. Cannot deactivate position=1 (New).
 router.patch('/:id/toggle', authenticate, authorize('Admin'), async (req, res, next) => {
   try {
-    
+    // Verify stage exists in catalog
     const { rows: stage } = await pool.query(
       `SELECT id, name, position FROM stage_catalog WHERE id = $1`, [req.params.id]
     )
@@ -75,6 +81,7 @@ router.patch('/:id/toggle', authenticate, authorize('Admin'), async (req, res, n
 
 const VALID_FIELDS = ['expected_value', 'expected_close_date', 'probability', 'description']
 
+// POST /api/pipeline-stages/:id/required-fields — super-admin only (global config, affects all orgs)
 router.post('/:id/required-fields', authenticate, requireSuperAdmin, async (req, res, next) => {
   try {
     const { field } = req.body
@@ -96,6 +103,7 @@ router.post('/:id/required-fields', authenticate, requireSuperAdmin, async (req,
   }
 })
 
+// DELETE /api/pipeline-stages/:id/required-fields/:field — super-admin only (global config, affects all orgs)
 router.delete('/:id/required-fields/:field', authenticate, requireSuperAdmin, async (req, res, next) => {
   try {
     await pool.query(

@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useEffect, useRef, useState } from 'react'
 
+/* ─── Intersection observer for scroll-in animations ─── */
 function useInView(threshold = 0.12) {
   const ref  = useRef(null)
   const [inView, setInView] = useState(false)
@@ -18,6 +19,7 @@ function useInView(threshold = 0.12) {
   return [ref, inView]
 }
 
+/* ─── Animated number counter ─── */
 function Counter({ to, prefix = '', suffix = '' }) {
   const [val, setVal] = useState(0)
   const [ref, inView] = useInView(0.5)
@@ -35,6 +37,7 @@ function Counter({ to, prefix = '', suffix = '' }) {
   return <span ref={ref}>{prefix}{val.toLocaleString()}{suffix}</span>
 }
 
+/* ─── Data ─── */
 const FEATURES = [
   { icon: <IcoContacts />, title: 'Contacts & Organisations', desc: 'A unified record for every lead, contact, and account — with full interaction history at a glance.' },
   { icon: <IcoPipeline />, title: 'Kanban Pipeline',          desc: 'Drag deals through custom stages. Visualise your entire funnel and forecast revenue accurately.' },
@@ -66,6 +69,9 @@ const MARQUEE = [
   'Clarity at every stage of the deal',
 ]
 
+/* ═══════════════════════════════════════════════════════
+   PAGE
+═══════════════════════════════════════════════════════ */
 export default function Home() {
   const { token } = useAuth()
   const navigate  = useNavigate()
@@ -84,7 +90,7 @@ export default function Home() {
   return (
     <div className="lp">
 
-      {}
+      {/* ── Nav ───────────────────────────────────────── */}
       <nav className={`lp-nav${scrolled ? ' lp-nav--solid' : ''}`}>
         <div className="lp-nav-inner">
           <div className="lp-logo">
@@ -101,7 +107,7 @@ export default function Home() {
         </div>
       </nav>
 
-      {}
+      {/* ── Hero ──────────────────────────────────────── */}
       <section className="lp-hero">
         <div className="lp-hero-bg" />
         <div className="lp-hero-grid" />
@@ -132,7 +138,7 @@ export default function Home() {
         </div>
       </section>
 
-      {}
+      {/* ── Marquee ───────────────────────────────────── */}
       <div className="lp-marquee-wrap">
         <div className="lp-marquee">
           {[...MARQUEE, ...MARQUEE].map((t, i) => (
@@ -141,7 +147,7 @@ export default function Home() {
         </div>
       </div>
 
-      {}
+      {/* ── Features ──────────────────────────────────── */}
       <section id="features" className="lp-section">
         <LpTag>Features</LpTag>
         <h2 className="lp-sh2">Everything your team needs,<br />in one place.</h2>
@@ -151,7 +157,7 @@ export default function Home() {
         </div>
       </section>
 
-      {}
+      {/* ── How it works ──────────────────────────────── */}
       <section id="how" className="lp-section-alt">
         <div className="lp-section-inner">
           <LpTag>Process</LpTag>
@@ -163,7 +169,7 @@ export default function Home() {
         </div>
       </section>
 
-      {}
+      {/* ── Stats strip ───────────────────────────────── */}
       <div className="lp-stats-strip">
         {STATS.map((s, i) => (
           <div key={i} className="lp-strip-stat">
@@ -175,7 +181,7 @@ export default function Home() {
         ))}
       </div>
 
-      {}
+      {/* ── Footer ────────────────────────────────────── */}
       <footer className="lp-footer">
         <div className="lp-footer-inner">
           <div className="lp-footer-brand">
@@ -205,6 +211,9 @@ export default function Home() {
   )
 }
 
+/* ═══════════════════════════════════════════════════════
+   DASHBOARD PREVIEW WIDGET
+═══════════════════════════════════════════════════════ */
 function DashPreview() {
   return (
     <div className="lp-dash">
@@ -260,6 +269,9 @@ function DashPreview() {
   )
 }
 
+/* ═══════════════════════════════════════════════════════
+   SUB-COMPONENTS
+═══════════════════════════════════════════════════════ */
 function LpTag({ children }) {
   return <div className="lp-tag">{children}</div>
 }
@@ -291,6 +303,10 @@ function StepCard({ n, title, desc, delay, last }) {
   )
 }
 
+
+/* ═══════════════════════════════════════════════════════
+   ICONS
+═══════════════════════════════════════════════════════ */
 function IcoContacts() { return <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path strokeLinecap="round" strokeLinejoin="round" d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> }
 function IcoPipeline() { return <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg> }
 function IcoTask()     { return <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg> }

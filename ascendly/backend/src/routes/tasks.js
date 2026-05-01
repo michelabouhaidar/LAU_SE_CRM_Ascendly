@@ -1,5 +1,6 @@
-
-
+// ══════════════════════════════════════
+//  Ascendly CRM — Tasks Routes
+// ══════════════════════════════════════
 const router = require("express").Router();
 const pool   = require("../db/pool");
 const { authenticate, authorize } = require("../middleware/auth");
@@ -12,16 +13,17 @@ router.param('id', (req, res, next, id) => {
   next()
 })
 
+// GET /api/tasks  — supports ?limit=50&offset=0&status=&assigned_to=&deal_id=&contact_id=&search=
 router.get("/", authenticate, async (req, res, next) => {
   try {
     const limit  = Math.min(parseInt(req.query.limit  ?? 50), 200)
     const offset = Math.max(parseInt(req.query.offset ?? 0),  0)
-    const { status, assigned_to, deal_id } = req.query;
-    
+    const { status, assigned_to, deal_id, contact_id } = req.query;
+    // Scope to the requesting user's organisation via the creator's employee record
     const params = [req.user.org_id];
     let where = `WHERE e1.org_id = $1`;
 
-    
+    // Sales Rep and SDR can only see tasks assigned to themselves
     if (req.user.role === 'Sales Rep' || req.user.role === 'SDR') {
       params.push(req.user.id);
       where += ` AND t.assigned_to = $${params.length}`;
@@ -38,6 +40,10 @@ router.get("/", authenticate, async (req, res, next) => {
     if (deal_id) {
       params.push(deal_id);
       where += ` AND t.deal_id = $${params.length}`;
+    }
+    if (contact_id) {
+      params.push(contact_id);
+      where += ` AND (t.contact_id = $${params.length} OR t.deal_id IN (SELECT id FROM deals WHERE contact_id = $${params.length} AND deleted_at IS NULL))`;
     }
     if (req.query.search) {
       params.push(`%${req.query.search}%`)
@@ -76,6 +82,7 @@ router.get("/", authenticate, async (req, res, next) => {
   }
 });
 
+// GET /api/tasks/:id
 router.get("/:id", authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -89,7 +96,7 @@ router.get("/:id", authenticate, async (req, res, next) => {
       [req.params.id, req.user.org_id]
     );
     if (!rows[0]) return res.status(404).json({ error: "Task not found." });
-    
+    // Sales Rep / SDR can only view tasks assigned to themselves
     if ((req.user.role === 'Sales Rep' || req.user.role === 'SDR') &&
         rows[0].assigned_to !== req.user.id) {
       return res.status(403).json({ error: 'You can only view your own tasks.' });
@@ -100,6 +107,7 @@ router.get("/:id", authenticate, async (req, res, next) => {
   }
 });
 
+// POST /api/tasks
 router.post("/", authenticate, authorize("Admin", "Sales Manager", "Sales Rep", "SDR"), async (req, res, next) => {
   try {
     const { deal_id, contact_id, assigned_to, title, type, due_date } = req.body;
@@ -107,7 +115,7 @@ router.post("/", authenticate, authorize("Admin", "Sales Manager", "Sales Rep", 
       return res.status(400).json({ error: "title is required." });
     }
 
-    
+    // Validate that referenced records belong to the caller's org
     if (deal_id) {
       const { rows: d } = await pool.query(
         `SELECT id FROM deals WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`, [deal_id, req.user.org_id]
@@ -138,15 +146,16 @@ router.post("/", authenticate, authorize("Admin", "Sales Manager", "Sales Rep", 
   }
 });
 
+// PATCH /api/tasks/:id
 router.patch("/:id", authenticate, authorize("Admin", "Sales Manager", "Sales Rep", "SDR"), async (req, res, next) => {
   try {
     const { title, type, due_date, status } = req.body;
 
-    
+    // Only Admin and Sales Manager may reassign tasks to other users
     const canReassign = req.user.role === 'Admin' || req.user.role === 'Sales Manager'
     const assigned_to = canReassign ? req.body.assigned_to : undefined
 
-    
+    // Fetch before state for descriptive audit log (scoped to org)
     const { rows: before } = await pool.query(
       `SELECT t.*, e1.org_id, e2.name AS assigned_to_name
        FROM tasks t
@@ -157,13 +166,13 @@ router.patch("/:id", authenticate, authorize("Admin", "Sales Manager", "Sales Re
     );
     if (!before[0]) return res.status(404).json({ error: "Task not found." });
 
-    
+    // Sales Rep / SDR can only update tasks assigned to themselves
     if ((req.user.role === 'Sales Rep' || req.user.role === 'SDR') &&
         before[0].assigned_to !== req.user.id) {
       return res.status(403).json({ error: 'You can only update your own tasks.' });
     }
 
-    
+    // Validate reassignment target belongs to the same org
     if (assigned_to) {
       const { rows: assignee } = await pool.query(
         `SELECT id FROM employees WHERE id = $1 AND org_id = $2 AND is_active = true`,
@@ -186,7 +195,7 @@ router.patch("/:id", authenticate, authorize("Admin", "Sales Manager", "Sales Re
     );
     if (!rows[0]) return res.status(404).json({ error: "Task not found." });
 
-    
+    // Build a specific description
     const changes = []
     if (status && status !== before[0].status) changes.push(`status → ${status}`)
     if (assigned_to && assigned_to !== before[0].assigned_to) {
@@ -206,6 +215,7 @@ router.patch("/:id", authenticate, authorize("Admin", "Sales Manager", "Sales Re
   }
 });
 
+// DELETE /api/tasks/:id  — Admin, Sales Manager
 router.delete("/:id", authenticate, authorize("Admin", "Sales Manager"), async (req, res, next) => {
   try {
     const { rows } = await pool.query(

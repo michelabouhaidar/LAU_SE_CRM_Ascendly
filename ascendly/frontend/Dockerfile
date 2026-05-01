@@ -1,3 +1,6 @@
+# ──────────────────────────────────────
+#  Ascendly CRM — Frontend (React/Vite)
+# ──────────────────────────────────────
 FROM node:20-alpine
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
@@ -14,4 +17,5 @@ USER appuser
 
 EXPOSE 5173
 
-CMD ["sh", "-c", "npm install && ./node_modules/.bin/vite --host 0.0.0.0 --port 5173"]
+# Vite dev server — bind to 0.0.0.0 so nginx can reach it
+CMD ["./node_modules/.bin/vite", "--host", "0.0.0.0", "--port", "5173"]

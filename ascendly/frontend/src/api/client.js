@@ -5,6 +5,7 @@ const api = axios.create({
   timeout: 10000,
 })
 
+// Attach access token and optional org override on every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('crm_token')
   if (token) config.headers['Authorization'] = `Bearer ${token}`
@@ -13,6 +14,7 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// Shared refresh promise — prevents multiple simultaneous refresh calls
 let refreshPromise = null
 
 api.interceptors.response.use(
@@ -21,7 +23,7 @@ api.interceptors.response.use(
     const orig = err.config
     const isAuthEndpoint = orig?.url?.includes('/auth/')
 
-    
+    // On 401, attempt a single token refresh then retry
     if (err.response?.status === 401 && !isAuthEndpoint && !orig._retry) {
       orig._retry = true
       const refreshToken = localStorage.getItem('crm_refresh_token')
@@ -51,9 +53,9 @@ api.interceptors.response.use(
           return api(orig)
         }
       } else {
-        
-        
-        
+        // Only hard-redirect if we actually had a token — if both token and refreshToken
+        // are already gone the user is already logged out (e.g. logout() just ran), so
+        // skip the redirect and let React auth state handle navigation.
         const hadToken = !!localStorage.getItem('crm_token')
         localStorage.removeItem('crm_token')
         localStorage.removeItem('crm_user')

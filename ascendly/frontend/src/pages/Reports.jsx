@@ -24,6 +24,13 @@ function initials(name) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
+/* ══════════════════════════════════════════════════
+   VBars — vertical bar chart using pixel heights (no CSS % - that's what was broken)
+══════════════════════════════════════════════════ */
+// data: array of { key, label, value, color }
+// chartH: usable bar area height in pixels
+// filter: current chart filter state { type, value } or null
+// onSelect(filter_or_null): called when bar is clicked
 function VBars({ data, chartH = 130, filter, onSelect, formatVal }) {
   const max = Math.max(...data.map(d => parseFloat(d.value) || 0), 1)
   return (
@@ -35,7 +42,7 @@ function VBars({ data, chartH = 130, filter, onSelect, formatVal }) {
           <div key={d.key} onClick={() => onSelect?.(isLit && filter ? null : { value: d.key, label: d.label })}
             style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
               cursor: onSelect ? 'pointer' : 'default', opacity: isLit ? 1 : 0.28, transition: 'opacity 0.2s' }}>
-            {}
+            {/* inner area: fixed height, bar grows from bottom */}
             <div style={{ height: chartH, display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'flex-end', width: '100%' }}>
               <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-2)', marginBottom: 3, lineHeight: 1 }}>
@@ -55,6 +62,13 @@ function VBars({ data, chartH = 130, filter, onSelect, formatVal }) {
   )
 }
 
+/* ══════════════════════════════════════════════════
+   GroupedVBars — two bars per column with pixel heights
+══════════════════════════════════════════════════ */
+// data: array of { key, label, a, b }  (a = first bar, b = second bar)
+// colorA, colorB: bar colors
+// filter: current filter or null
+// onSelect: called with { value: key, label }
 function GroupedVBars({ data, chartH = 120, colorA = '#74ba89', colorB = '#ef4444', filter, onSelect, fmtA, fmtB }) {
   const max = Math.max(...data.flatMap(d => [parseFloat(d.a) || 0, parseFloat(d.b) || 0]), 1)
   return (
@@ -68,7 +82,7 @@ function GroupedVBars({ data, chartH = 120, colorA = '#74ba89', colorB = '#ef444
             style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
               cursor: onSelect ? 'pointer' : 'default', opacity: isLit ? 1 : 0.28, transition: 'opacity 0.2s' }}>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: chartH }}>
-              {}
+              {/* Bar A */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
                 justifyContent: 'flex-end', height: chartH, flex: 1 }}>
                 <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-2)', marginBottom: 2 }}>
@@ -77,7 +91,7 @@ function GroupedVBars({ data, chartH = 120, colorA = '#74ba89', colorB = '#ef444
                 <div style={{ width: '100%', height: aH, background: colorA,
                   borderRadius: '2px 2px 0 0', flexShrink: 0, transition: 'height 0.4s ease' }} />
               </div>
-              {}
+              {/* Bar B */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
                 justifyContent: 'flex-end', height: chartH, flex: 1 }}>
                 <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-2)', marginBottom: 2 }}>
@@ -95,6 +109,9 @@ function GroupedVBars({ data, chartH = 120, colorA = '#74ba89', colorB = '#ef444
   )
 }
 
+/* ══════════════════════════════════════════════════
+   MAIN EXPORT
+══════════════════════════════════════════════════ */
 export default function Reports() {
   const [revenue,        setRevenue]        = useState(null)
   const [pipeline,       setPipeline]       = useState([])
@@ -119,7 +136,7 @@ export default function Reports() {
   const [dateFrom,    setDateFrom]    = useState('')
   const [dateTo,      setDateTo]      = useState('')
   const [applied,     setApplied]     = useState({ dateFrom: '', dateTo: '' })
-  const [selectedRep, setSelectedRep] = useState(null) 
+  const [selectedRep, setSelectedRep] = useState(null) // { id, name } or null
 
   function selectRep(rep) {
     setSelectedRep(prev => prev?.id === rep.id ? null : rep)
@@ -191,19 +208,19 @@ export default function Reports() {
     fetchData(selectedRep?.id ?? null, {})
   }
 
-  
+  /* derived maxes */
   const maxLeadRevenue = Math.max(...leadSources.map(s => parseFloat(s.revenue ?? 0)), 1)
   const maxVelocity    = Math.max(...velocity.map(s => parseFloat(s.avg_days ?? 0)), 1)
   const maxRepPipeline = Math.max(...repPipeline.map(r => parseFloat(r.pipeline_value ?? 0)), 1)
   const maxInteraction = Math.max(...interactions.map(i => i.count ?? 0), 1)
 
-  
+  /* approval helpers */
   const approvalTotal   = approvals.reduce((s, a) => s + (a.count ?? 0), 0)
   const approvedRow     = approvals.find(a => a.status === 'Approved')
 
   return (
     <div>
-      {}
+      {/* ── Page Header ── */}
       <div className="page-header">
         <div>
           <div className="page-title">Reports</div>
@@ -211,7 +228,7 @@ export default function Reports() {
         </div>
       </div>
 
-      {}
+      {/* ── Filter bar ── */}
       <div className="filter-bar" style={{ marginBottom: 20 }}>
         <div className="input-group" style={{ marginBottom: 0, minWidth: 160 }}>
           <label className="input-label">From</label>
@@ -229,7 +246,7 @@ export default function Reports() {
         </div>
       </div>
 
-      {}
+      {/* ── Rep filter badge ── */}
       {selectedRep && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: 'inline-flex', fontSize: 12, color: 'var(--green-text)', fontWeight: 500,
@@ -267,7 +284,7 @@ export default function Reports() {
         transition: 'opacity 0.35s ease, filter 0.35s ease, transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
       }}>
 
-      {}
+      {/* ── Revenue stat cards ── */}
       <div className="stats-grid mb-24">
         <RevenueCard label="Total Revenue"  value={fmt(revenue?.total_revenue)}  loading={loading} accent="#62c0d5" />
         <RevenueCard label="Deals Won"      value={revenue?.total_won ?? '—'}    loading={loading} accent="#22C55E" />
@@ -275,10 +292,10 @@ export default function Reports() {
         <RevenueCard label="Largest Deal"   value={fmt(revenue?.max_deal_value)} loading={loading} accent="#8B5CF6" />
       </div>
 
-      {}
+      {/* ── ROW 1: Revenue trends ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Revenue Trends</div>
       <div className="grid-2 mb-24">
-        {}
+        {/* Monthly Revenue */}
         <div className="card card-pad">
           <div className="flex items-center justify-between mb-16">
             <span className="card-title">Monthly Revenue</span>
@@ -296,7 +313,7 @@ export default function Reports() {
           }
         </div>
 
-        {}
+        {/* Monthly Created vs Won */}
         <div className="card card-pad">
           <div className="flex items-center justify-between mb-16">
             <span className="card-title">Deals Created vs Won</span>
@@ -320,10 +337,10 @@ export default function Reports() {
         </div>
       </div>
 
-      {}
+      {/* ── ROW 2: Pipeline analysis ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Pipeline Analysis</div>
       <div className="grid-3 mb-24">
-        {}
+        {/* Pipeline by Stage */}
         <div className="card card-pad">
           <div className="card-title" style={{ marginBottom: 14 }}>Pipeline by Stage</div>
           {loading
@@ -357,7 +374,7 @@ export default function Reports() {
           }
         </div>
 
-        {}
+        {/* Stage Conversion Funnel */}
         <div className="card card-pad">
           <div className="card-title" style={{ marginBottom: 14 }}>Stage Conversion</div>
           {loading
@@ -388,7 +405,7 @@ export default function Reports() {
           }
         </div>
 
-        {}
+        {/* Stage Velocity */}
         <div className="card card-pad">
           <div className="card-title" style={{ marginBottom: 4 }}>Stage Velocity</div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 14 }}>Average days per stage</div>
@@ -417,10 +434,10 @@ export default function Reports() {
         </div>
       </div>
 
-      {}
+      {/* ── Pipeline Health: Deal Age Distribution ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Pipeline Health</div>
       <div className="mb-24">
-        {}
+        {/* Deal Age Distribution */}
         <div className="card card-pad">
           <div className="card-title" style={{ marginBottom: 4 }}>Deal Age Distribution</div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 14 }}>Open deals grouped by days since creation</div>
@@ -438,10 +455,10 @@ export default function Reports() {
         </div>
       </div>
 
-      {}
+      {/* ── ROW 3: Win/Loss analysis ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Win / Loss Analysis</div>
       <div className="grid-2 mb-24">
-        {}
+        {/* Win/Loss Monthly */}
         <div className="card card-pad">
           <div className="flex items-center justify-between mb-16">
             <span className="card-title">Won vs Lost by Month</span>
@@ -464,7 +481,7 @@ export default function Reports() {
           }
         </div>
 
-        {}
+        {/* Deal Cycle KPI */}
         <div className="card card-pad">
           <div className="card-title" style={{ marginBottom: 16 }}>Deal Cycle Time</div>
           {loading
@@ -499,10 +516,10 @@ export default function Reports() {
         </div>
       </div>
 
-      {}
+      {/* ── ROW 4: Revenue sources ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Revenue Sources</div>
       <div className="grid-2 mb-24">
-        {}
+        {/* Lead Source Revenue */}
         <div className="card card-pad">
           <div className="card-title" style={{ marginBottom: 14 }}>Revenue by Lead Source</div>
           {loading
@@ -529,7 +546,7 @@ export default function Reports() {
           }
         </div>
 
-        {}
+        {/* Rep Pipeline */}
         <div className="card card-pad">
           <div className="card-title" style={{ marginBottom: 14 }}>Rep Pipeline Value</div>
           {loading
@@ -568,10 +585,10 @@ export default function Reports() {
         </div>
       </div>
 
-      {}
+      {/* ── Growth & Activity ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Growth & Activity</div>
       <div className="grid-3 mb-24">
-        {}
+        {/* Contact Growth */}
         <div className="card card-pad">
           <div className="card-title" style={{ marginBottom: 4 }}>Contact Growth</div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 14 }}>New contacts per month (last 12 mo)</div>
@@ -593,7 +610,7 @@ export default function Reports() {
           }
         </div>
 
-        {}
+        {/* Win Rate Trend */}
         <div className="card card-pad">
           <div className="card-title" style={{ marginBottom: 4 }}>Win Rate Trend</div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 14 }}>Monthly win rate %</div>
@@ -618,7 +635,7 @@ export default function Reports() {
           }
         </div>
 
-        {}
+        {/* Avg Deal Value Trend */}
         <div className="card card-pad">
           <div className="card-title" style={{ marginBottom: 4 }}>Avg Deal Value Trend</div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 14 }}>Average value of won deals per month</div>
@@ -645,10 +662,10 @@ export default function Reports() {
         </div>
       </div>
 
-      {}
+      {/* ── ROW 5: Activity & distribution ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Activity & Distribution</div>
       <div className="grid-3 mb-24">
-        {}
+        {/* Interaction Types */}
         <div className="card card-pad">
           <div className="card-title" style={{ marginBottom: 14 }}>Interaction Types</div>
           {loading
@@ -679,7 +696,7 @@ export default function Reports() {
           }
         </div>
 
-        {}
+        {/* Approval Stats */}
         <div className="card card-pad">
           <div className="card-title" style={{ marginBottom: 14 }}>Approval Stats</div>
           {loading
@@ -717,7 +734,7 @@ export default function Reports() {
           }
         </div>
 
-        {}
+        {/* Deal Size Distribution */}
         <div className="card card-pad">
           <div className="card-title" style={{ marginBottom: 4 }}>Deal Size Distribution</div>
           {loading
@@ -734,10 +751,10 @@ export default function Reports() {
         </div>
       </div>
 
-      {}
+      {/* ── ROW 6: Task completion + report summary ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Team Productivity</div>
       <div className="grid-2 mb-24">
-        {}
+        {/* Task Completion by Rep */}
         <div className="card card-pad">
           <div className="card-title" style={{ marginBottom: 14 }}>Task Completion by Rep</div>
           {loading
@@ -788,7 +805,7 @@ export default function Reports() {
           }
         </div>
 
-        {}
+        {/* Report Summary */}
         <div className="card card-pad">
           <div className="card-title" style={{ marginBottom: 16 }}>Report Summary</div>
           {loading
@@ -823,7 +840,7 @@ export default function Reports() {
         </div>
       </div>
 
-      {}
+      {/* ── Leaderboard (full width) ── */}
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Sales Leaderboard</div>
       <div className="card mb-24">
         <div className="card-pad" style={{ paddingBottom: 0 }}>
@@ -898,10 +915,14 @@ export default function Reports() {
           )
         }
       </div>
-      </div>{}
+      </div>{/* end loading fade wrapper */}
     </div>
   )
 }
+
+/* ══════════════════════════════════════════════════
+   SHARED PRIMITIVES
+══════════════════════════════════════════════════ */
 
 function RevenueCard({ label, value, loading, accent }) {
   return (

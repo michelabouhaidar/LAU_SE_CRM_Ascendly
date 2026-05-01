@@ -1,11 +1,13 @@
-
-
+// ══════════════════════════════════════
+//  Ascendly CRM — Audit Logger Helper
+// ══════════════════════════════════════
 const crypto = require('crypto')
 const pool   = require('../db/pool')
 
+// #40 — compute SHA-256 chain hash over previous hash + event data
 async function writeAudit(actorId, action, description, orgId = null, entityType = null, entityId = null) {
   try {
-    
+    // Get last chain hash for this org (NULL-safe comparison)
     const { rows: prev } = await pool.query(
       `SELECT chain_hash FROM audit_log
        WHERE org_id IS NOT DISTINCT FROM $1

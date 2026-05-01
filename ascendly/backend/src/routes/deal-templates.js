@@ -1,11 +1,13 @@
-
-
+// ══════════════════════════════════════════════════════
+//  Ascendly CRM — Deal Templates Routes
+// ══════════════════════════════════════════════════════
 const router = require('express').Router()
 const pool   = require('../db/pool')
 const { authenticate, authorize } = require('../middleware/auth')
 const { writeAudit } = require('../middleware/audit')
 const { sendOk }     = require('../middleware/respond')
 
+// GET /api/deal-templates  — all templates for org
 router.get('/', authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -20,6 +22,7 @@ router.get('/', authenticate, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// POST /api/deal-templates  — create template (Admin / Manager only)
 router.post('/', authenticate,
   authorize('Admin', 'Sales Manager'),
   async (req, res, next) => {
@@ -41,6 +44,7 @@ router.post('/', authenticate,
   }
 )
 
+// PATCH /api/deal-templates/:id  — update template (Admin / Manager only)
 router.patch('/:id', authenticate,
   authorize('Admin', 'Sales Manager'),
   async (req, res, next) => {
@@ -66,6 +70,7 @@ router.patch('/:id', authenticate,
   }
 )
 
+// DELETE /api/deal-templates/:id  — Admin only
 router.delete('/:id', authenticate,
   authorize('Admin', 'Sales Manager'),
   async (req, res, next) => {

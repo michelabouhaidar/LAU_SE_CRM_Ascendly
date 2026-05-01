@@ -1,5 +1,16 @@
 #!/usr/bin/env node
-
+// ══════════════════════════════════════════════════════════
+//  Ascendly CRM — Database Migration Runner
+//
+//  Usage:
+//    node migrate.js            — apply all pending migrations
+//    node migrate.js --status   — list applied / pending migrations
+//
+//  Migrations live in ./migrations/ and are numbered:
+//    0001_description.sql, 0002_description.sql, …
+//
+//  Applied migrations are tracked in the `schema_migrations` table.
+// ══════════════════════════════════════════════════════════
 require('dotenv').config()
 const fs   = require('fs')
 const path = require('path')

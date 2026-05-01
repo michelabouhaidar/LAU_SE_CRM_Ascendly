@@ -1,3 +1,11 @@
+#!/bin/bash
+# ══════════════════════════════════════════════════════════════════
+#  Ascendly CRM — Runtime bootstrap
+#  Runs on first container start. Creates the live org admin user
+#  from environment variables (not baked into the image).
+#
+#  Requires: ADMIN_NAME  ADMIN_EMAIL  ADMIN_PASSWORD
+# ══════════════════════════════════════════════════════════════════
 set -e
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-SQL

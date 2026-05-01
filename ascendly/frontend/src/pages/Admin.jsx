@@ -47,6 +47,9 @@ export default function Admin() {
   )
 }
 
+/* ══════════════════════════════════════════════════
+   USERS TAB
+══════════════════════════════════════════════════ */
 const SORT_FIELDS = [
   { value: 'name',      label: 'Name' },
   { value: 'email',     label: 'Email' },
@@ -277,6 +280,7 @@ const Chip = ({ color, label, mono }) => (
   </span>
 )
 
+/* ── Create User Modal ─────────────────────────── */
 function CreateUserModal({ onClose, onSaved }) {
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'Sales Rep', phone: '', org_id: '' })
   const [orgs,   setOrgs]   = useState([])
@@ -353,6 +357,7 @@ function CreateUserModal({ onClose, onSaved }) {
   )
 }
 
+/* ── Edit User Modal ───────────────────────────── */
 function EditUserModal({ user, onClose, onSaved }) {
   const [form, setForm] = useState({
     name:   user.name,
@@ -427,6 +432,7 @@ function EditUserModal({ user, onClose, onSaved }) {
   )
 }
 
+/* ── Reset Password Modal ──────────────────────── */
 function ResetPasswordModal({ user, onClose }) {
   const [password,  setPassword]  = useState('')
   const [confirm,   setConfirm]   = useState('')
@@ -484,6 +490,9 @@ function ResetPasswordModal({ user, onClose }) {
   )
 }
 
+/* ══════════════════════════════════════════════════
+   ORGANIZATIONS TAB
+══════════════════════════════════════════════════ */
 function OrgsTab({ canEdit }) {
   const [orgs,       setOrgs]       = useState([])
   const [loading,    setLoading]    = useState(true)
@@ -679,6 +688,9 @@ function EditOrgModal({ org, onClose, onSaved }) {
   )
 }
 
+/* ══════════════════════════════════════════════════
+   PIPELINE STAGES TAB
+══════════════════════════════════════════════════ */
 const FIELD_LABELS = {
   expected_value:      'Value',
   expected_close_date: 'Close Date',
@@ -689,9 +701,9 @@ const ALL_FIELDS = Object.keys(FIELD_LABELS)
 
 function PipelineTab({ canEdit }) {
   const [stages,       setStages]       = useState([])
-  const [saving,       setSaving]       = useState(null)   
-  const [fieldAdding,  setFieldAdding]  = useState(null)   
-  const [fieldSaving,  setFieldSaving]  = useState(null)   
+  const [saving,       setSaving]       = useState(null)   // stage id being toggled
+  const [fieldAdding,  setFieldAdding]  = useState(null)   // stage id showing field picker
+  const [fieldSaving,  setFieldSaving]  = useState(null)   // 'stageId:field' being saved/removing
 
   function load() {
     api.get('/pipeline-stages').then(r => setStages(r.data)).catch(() => {})
@@ -776,7 +788,7 @@ function PipelineTab({ canEdit }) {
                   <td>
                     <Chip color={isTerminal ? '#62c0d5' : '#3B82F6'} label={isTerminal ? 'Terminal' : 'Progressive'} />
                   </td>
-                  {}
+                  {/* Required Fields */}
                   <td>
                     {isTerminal ? (
                       <span className="text-gray" style={{ fontSize: 11 }}>n/a</span>
@@ -865,6 +877,9 @@ function PipelineTab({ canEdit }) {
   )
 }
 
+/* ══════════════════════════════════════════════════
+   LEAD SOURCES TAB
+══════════════════════════════════════════════════ */
 function LeadSourcesTab({ canEdit, canAdd }) {
   const [sources,    setSources]    = useState([])
   const [loading,    setLoading]    = useState(true)
@@ -1022,6 +1037,9 @@ function EditLeadSourceModal({ source, onClose, onSaved }) {
   )
 }
 
+/* ══════════════════════════════════════════════════
+   AUDIT LOG TAB
+══════════════════════════════════════════════════ */
 const ENTITY_LINK = {
   contact: id => `/contacts/${id}`,
   deal:    id => `/deals/${id}`,
@@ -1127,7 +1145,7 @@ function AuditTab() {
   const [sortDir,      setSortDir]      = useState('desc')
   const [selected,     setSelected]     = useState(null)
 
-  
+  // Build query string from all params
   const buildQuery = useCallback((off, lim, sf, sd, q, af, ef) => {
     const p = new URLSearchParams({
       limit:  lim,
@@ -1153,12 +1171,12 @@ function AuditTab() {
       .finally(() => setLoading(false))
   }, [buildQuery])
 
-  
+  // Initial load
   useEffect(() => {
     load(0, limit, sortField, sortDir, search, actionFilter, entityFilter)
-  }, []) 
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  
+  // Re-fetch when filters/sort change, reset to page 0
   function applyFilters(newSearch, newAction, newEntity, newLimit) {
     load(0, newLimit, sortField, sortDir, newSearch, newAction, newEntity)
   }
@@ -1214,7 +1232,7 @@ function AuditTab() {
     <div>
       {selected && <AuditDetailModal log={selected} onClose={() => setSelected(null)} />}
 
-      {}
+      {/* ── Filter bar ── */}
       <div className="filter-bar" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div className="search-wrap" style={{ flex: '1 1 220px', maxWidth: 300 }}>
           <svg className="search-icon" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1327,7 +1345,7 @@ function AuditTab() {
           </div>
         )}
 
-        {}
+        {/* ── Pagination footer ── */}
         {!loading && total > 0 && (
           <div className="flex items-center justify-between" style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
             <button
@@ -1358,6 +1376,9 @@ function AuditTab() {
   )
 }
 
+/* ══════════════════════════════════════════════════
+   DEAL TEMPLATES TAB
+══════════════════════════════════════════════════ */
 function TemplatesTab({ canEdit }) {
   const [templates, setTemplates] = useState([])
   const [loading,   setLoading]   = useState(true)

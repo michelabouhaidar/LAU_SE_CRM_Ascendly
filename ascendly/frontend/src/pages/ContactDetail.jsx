@@ -15,7 +15,7 @@ export default function ContactDetail() {
   const [contact,      setContact]      = useState(null)
   const [deals,        setDeals]        = useState([])
   const [interactions, setInteractions] = useState([])
-  const [stageHistory, setStageHistory] = useState([])  
+  const [stageHistory, setStageHistory] = useState([])  // all stage history across deals
   const [tasks,        setTasks]        = useState([])
   const [tags,         setTags]         = useState([])
   const [orgTags,      setOrgTags]      = useState([])
@@ -28,8 +28,7 @@ export default function ContactDetail() {
   const [tagSaving,     setTagSaving]     = useState(false)
   const tagPickerRef = useRef(null)
 
-  const canEdit   = ['Admin', 'Sales Manager', 'Sales Rep', 'SDR'].includes(user?.role)
-  const canDelete = ['Admin', 'Sales Manager'].includes(user?.role)
+  const canEdit = ['Admin', 'Sales Manager', 'Sales Rep', 'SDR'].includes(user?.role)
 
   const initials = (name) => name?.split(' ').map(p => p[0]).join('').toUpperCase().slice(0, 2) ?? '?'
   const COLORS   = ['#62c0d5', '#8B5CF6', '#F59E0B', '#F97316', '#3B82F6']
@@ -64,7 +63,7 @@ export default function ContactDetail() {
       setTags(c.data.tags ?? [])
       setOrgTags(allOrgTags.data)
 
-      
+      // Fetch interactions + stage history with 2 batched queries instead of 2N per-deal calls
       const [iRes, hRes] = await Promise.all([
         api.get(`/contacts/${id}/interactions`).catch(() => ({ data: [] })),
         api.get(`/contacts/${id}/stage-history`).catch(() => ({ data: [] })),
@@ -72,7 +71,7 @@ export default function ContactDetail() {
       setInteractions(iRes.data.map(i => ({ ...i, _type: 'interaction', _dealTitle: i.deal_title, _dealId: i.deal_id })))
       setStageHistory(hRes.data.map(h => ({ ...h, _type: 'stage', _dealTitle: h.deal_title, _dealId: h.deal_id })))
 
-      
+      // Fetch tasks linked to this contact
       const taskRes = await api.get(`/tasks?contact_id=${id}`).catch(() => ({ data: { data: [] } }))
       setTasks(taskRes.data.data ?? taskRes.data)
     } catch {
@@ -126,15 +125,6 @@ export default function ContactDetail() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [tagPickerOpen])
 
-  async function deleteContact() {
-    if (!confirm(`Delete ${contact?.full_name}? This cannot be undone.`)) return
-    try {
-      await api.delete(`/contacts/${id}`)
-      navigate('/contacts')
-    } catch (e) {
-      alert(e.response?.data?.error ?? 'Failed to delete contact.')
-    }
-  }
 
   if (loading) return (
     <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-2)', fontSize: 14 }}>
@@ -158,7 +148,7 @@ export default function ContactDetail() {
     </span>
   )
 
-  
+  // Build unified timeline: interactions + tasks + stage history, sorted newest first
   const timeline = [
     ...interactions.map(i => ({ _date: i.occurred_at, _kind: 'interaction', ...i })),
     ...tasks.map(t => ({ _date: t.created_at, _kind: 'task', ...t })),
@@ -169,7 +159,7 @@ export default function ContactDetail() {
 
   return (
     <div>
-      {}
+      {/* Header */}
       <div className="page-header">
         <div>
           <div style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 4 }}>
@@ -189,12 +179,11 @@ export default function ContactDetail() {
         </div>
         <div className="flex items-center gap-8">
           {canEdit && <button className="btn btn-ghost" onClick={() => setShowEdit(true)}>Edit</button>}
-          {canDelete && <button className="btn btn-danger" onClick={deleteContact}>Delete</button>}
         </div>
       </div>
 
       <div className="detail-grid">
-        {}
+        {/* Left: profile card */}
         <div>
           <div className="detail-section">
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
@@ -222,7 +211,7 @@ export default function ContactDetail() {
               </div>
             )}
 
-            {}
+            {/* ── Tags ── */}
             <div className="detail-field" style={{ flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
               <label>Tags</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
@@ -298,7 +287,7 @@ export default function ContactDetail() {
           </div>
         </div>
 
-        {}
+        {/* Right: tabs */}
         <div>
           <div className="admin-tab-bar" style={{ marginBottom: 16 }}>
             {[
@@ -312,7 +301,7 @@ export default function ContactDetail() {
             ))}
           </div>
 
-          {}
+          {/* Deals tab */}
           {tab === 'deals' && (
             <div className="card">
               {deals.length === 0 ? (
@@ -343,7 +332,7 @@ export default function ContactDetail() {
             </div>
           )}
 
-          {}
+          {/* Unified Timeline tab */}
           {tab === 'timeline' && (
             <div className="card" style={{ padding: '4px 20px 20px' }}>
               {timeline.length === 0 ? (
@@ -393,7 +382,7 @@ export default function ContactDetail() {
             </div>
           )}
 
-          {}
+          {/* Tasks tab */}
           {tab === 'tasks' && (
             <div className="card">
               {tasks.length === 0 ? (

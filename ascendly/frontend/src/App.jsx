@@ -43,7 +43,7 @@ export default function App() {
           <Route path="/login"          element={<Login />} />
           <Route path="/change-password" element={<ChangePasswordRoute />} />
 
-          {}
+          {/* Pathless layout route — keeps all app URLs unchanged */}
           <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
             <Route path="dashboard"    element={<Dashboard />} />
             <Route path="contacts"     element={<Contacts />} />

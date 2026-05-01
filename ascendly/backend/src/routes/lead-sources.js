@@ -1,10 +1,12 @@
-
-
+// ══════════════════════════════════════
+//  Ascendly CRM — Lead Sources Routes
+// ══════════════════════════════════════
 const router = require('express').Router()
 const pool   = require('../db/pool')
 const { authenticate, authorize, isSuperAdmin } = require('../middleware/auth')
 const { writeAudit } = require('../middleware/audit')
 
+// GET /api/lead-sources — all authenticated users, scoped to own org
 router.get('/', authenticate, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -17,6 +19,7 @@ router.get('/', authenticate, async (req, res, next) => {
   }
 })
 
+// POST /api/lead-sources — any Admin (all admins can add new sources)
 router.post('/', authenticate, authorize('Admin'), async (req, res, next) => {
   try {
     const { label } = req.body
@@ -34,6 +37,7 @@ router.post('/', authenticate, authorize('Admin'), async (req, res, next) => {
   }
 })
 
+// PATCH /api/lead-sources/:id — super admin only
 router.patch('/:id', authenticate, authorize('Admin'), async (req, res, next) => {
   if (!isSuperAdmin(req)) return res.status(403).json({ error: 'Forbidden: super admin only.' })
   try {
@@ -52,6 +56,7 @@ router.patch('/:id', authenticate, authorize('Admin'), async (req, res, next) =>
   }
 })
 
+// DELETE /api/lead-sources/:id — super admin only
 router.delete('/:id', authenticate, authorize('Admin'), async (req, res, next) => {
   if (!isSuperAdmin(req)) return res.status(403).json({ error: 'Forbidden: super admin only.' })
   try {

@@ -5,7 +5,6 @@ import { useAuth } from '../context/AuthContext'
 import Modal from '../components/Modal'
 import ViewToggle from '../components/ViewToggle'
 
-const LEAD_SOURCES = ['Website', 'Referral', 'Walk-in', 'Ad Campaign', 'Cold Outreach', 'Event', 'Other']
 const CSV_COLUMNS  = ['full_name', 'email', 'phone', 'company', 'lead_source', 'notes']
 const TAG_COLORS   = ['#6B7A90','#3B82F6','#8B5CF6','#F59E0B','#62c0d5','#22C55E','#F97316','#14B8A6','#EC4899']
 
@@ -16,8 +15,8 @@ export default function Contacts() {
   const [orgTags,      setOrgTags]      = useState([])
   const [loading,      setLoading]      = useState(true)
   const [search,       setSearch]       = useState('')
-  const [tagFilter,    setTagFilter]    = useState('')   
-  const [viewMode,     setViewMode]     = useState('list') 
+  const [tagFilter,    setTagFilter]    = useState('')   // tag id or ''
+  const [viewMode,     setViewMode]     = useState('list') // 'list' | 'cards'
   const [showCreate,   setShowCreate]   = useState(false)
   const [showImport,   setShowImport]   = useState(false)
   const [showDupes,    setShowDupes]    = useState(false)
@@ -79,7 +78,7 @@ export default function Contacts() {
   const COLORS   = ['#62c0d5', '#8B5CF6', '#F59E0B', '#F97316', '#3B82F6']
   const colorFor = (name) => COLORS[(name?.charCodeAt(0) ?? 0) % COLORS.length]
 
-  
+  /* ── Export ─────────────────────────────────── */
   function exportCSV() {
     const header = CSV_COLUMNS.join(',')
     const rows   = contacts.map(c =>
@@ -190,7 +189,7 @@ export default function Contacts() {
             </table>
           </div>
         ) : (
-          
+          /* ── Cards view ─────────────────────────────────── */
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
@@ -221,7 +220,7 @@ export default function Contacts() {
                   e.currentTarget.style.boxShadow = 'none'
                 }}
               >
-                {}
+                {/* Avatar + name */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div className="avatar" style={{
                     background: colorFor(c.full_name), fontSize: 13,
@@ -241,7 +240,7 @@ export default function Contacts() {
                   </div>
                 </div>
 
-                {}
+                {/* Contact info */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {c.email && (
                     <div style={{ fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -261,7 +260,7 @@ export default function Contacts() {
                   )}
                 </div>
 
-                {}
+                {/* Tags */}
                 {(c.tags ?? []).length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                     {c.tags.map(t => (
@@ -274,7 +273,7 @@ export default function Contacts() {
                   </div>
                 )}
 
-                {}
+                {/* Footer */}
                 <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 'auto', paddingTop: 4, borderTop: '1px solid var(--border)' }}>
                   Added {new Date(c.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </div>
@@ -309,18 +308,21 @@ export default function Contacts() {
   )
 }
 
+/* ── Create Contact Modal ───────────────────────── */
 function CreateContactModal({ onClose, onSaved }) {
   const [form,        setForm]        = useState({ full_name: '', email: '', phone: '', company: '', lead_source: '', notes: '' })
   const [saving,      setSaving]      = useState(false)
   const [error,       setError]       = useState('')
   const [orgTags,     setOrgTags]     = useState([])
-  const [selTags,     setSelTags]     = useState([])   
+  const [selTags,     setSelTags]     = useState([])   // tag ids selected for this new contact
   const [newTagName,  setNewTagName]  = useState('')
   const [newTagColor, setNewTagColor] = useState(TAG_COLORS[0])
+  const [leadSources, setLeadSources] = useState([])
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   useEffect(() => {
     api.get('/contact-tags').then(r => setOrgTags(r.data)).catch(() => {})
+    api.get('/lead-sources').then(r => setLeadSources(r.data)).catch(() => {})
   }, [])
 
   function toggleTag(id) {
@@ -374,7 +376,7 @@ function CreateContactModal({ onClose, onSaved }) {
           <label className="input-label">Lead Source</label>
           <select className="input" value={form.lead_source} onChange={e => set('lead_source', e.target.value)}>
             <option value="">— Select source —</option>
-            {LEAD_SOURCES.map(s => <option key={s}>{s}</option>)}
+            {leadSources.map(s => <option key={s.id} value={s.label}>{s.label}</option>)}
           </select>
         </div>
         <div className="input-group">
@@ -383,7 +385,7 @@ function CreateContactModal({ onClose, onSaved }) {
             value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Any relevant notes…" />
         </div>
 
-        {}
+        {/* Tags */}
         <div className="input-group" style={{ marginBottom: 4 }}>
           <label className="input-label">Tags</label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: orgTags.length ? 8 : 0 }}>
@@ -428,28 +430,52 @@ function CreateContactModal({ onClose, onSaved }) {
   )
 }
 
+/* ── CSV Import Modal ───────────────────────────── */
 function ImportCSVModal({ onClose, onSaved }) {
   const fileRef   = useRef(null)
-  const [step,    setStep]    = useState('instructions') 
+  const [step,    setStep]    = useState('instructions') // instructions | preview | result
   const [preview, setPreview] = useState([])
   const [dropped, setDropped] = useState([])
   const [parseError, setParseError] = useState('')
   const [importing,  setImporting]  = useState(false)
-  const [result,     setResult]     = useState(null)    
+  const [result,     setResult]     = useState(null)    // { imported, errors }
+  const [leadSources, setLeadSources] = useState([])
+
+  useEffect(() => {
+    api.get('/lead-sources').then(r => setLeadSources(r.data)).catch(() => {})
+  }, [])
+
+  function parseCSVLine(line) {
+    const vals = []
+    let cur = '', inQuote = false
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]
+      if (ch === '"') {
+        if (inQuote && line[i + 1] === '"') { cur += '"'; i++ }
+        else inQuote = !inQuote
+      } else if (ch === ',' && !inQuote) {
+        vals.push(cur.trim()); cur = ''
+      } else {
+        cur += ch
+      }
+    }
+    vals.push(cur.trim())
+    return vals
+  }
 
   function parseCSV(text) {
     const lines = text.trim().split(/\r?\n/)
     if (lines.length < 2) return { error: 'File appears empty or has no data rows.' }
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''))
+    const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase())
     const reqCols = ['full_name', 'email', 'phone', 'company']
     const missingCols = reqCols.filter(c => !headers.includes(c))
     if (missingCols.length > 0) return { error: `Missing required columns: ${missingCols.join(', ')}` }
-    const rows = []
-    const dropped = []
+    const rows = [], dropped = []
     lines.slice(1).forEach((line, idx) => {
-      const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''))
+      if (!line.trim()) return
+      const vals = parseCSVLine(line)
       const r = Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']))
-      const missing = ['full_name', 'email', 'phone', 'company'].filter(f => !r[f])
+      const missing = reqCols.filter(f => !r[f])
       if (missing.length > 0) {
         dropped.push({ row: idx + 2, reason: `Missing: ${missing.join(', ')}` })
       } else {
@@ -478,8 +504,15 @@ function ImportCSVModal({ onClose, onSaved }) {
   async function doImport() {
     setImporting(true)
     try {
-      const res = await api.post('/contacts/import', { rows: preview })
-      setResult(res.data)
+      const { data: { jobId } } = await api.post('/contacts/import', { rows: preview })
+      // Poll until job completes
+      let job
+      while (true) {
+        await new Promise(r => setTimeout(r, 600))
+        const { data } = await api.get(`/contacts/import/${jobId}`)
+        if (data.status === 'done') { job = data; break }
+      }
+      setResult(job)
       setStep('result')
     } catch (e) {
       setParseError(e.response?.data?.error ?? 'Import failed.')
@@ -487,8 +520,11 @@ function ImportCSVModal({ onClose, onSaved }) {
   }
 
   function downloadTemplate() {
-    const blob = new Blob([CSV_COLUMNS.join(',') + '\nJane Smith,jane@acme.com,+1 555 0001,Acme Corp,Website,\n'],
-      { type: 'text/csv' })
+    const blob = new Blob([
+      CSV_COLUMNS.join(',') + '\n' +
+      'Jane Smith,jane@acme.com,+1 555 0001,Acme Corp,Website,Key account\n' +
+      'John Doe,john@example.com,+1 555 0002,Example Ltd,Referral,\n'
+    ], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a   = document.createElement('a')
     a.href = url; a.download = 'contacts-template.csv'; a.click(); URL.revokeObjectURL(url)
@@ -496,10 +532,10 @@ function ImportCSVModal({ onClose, onSaved }) {
 
   return (
     <Modal title="Import Contacts from CSV" onClose={onClose} width={600}>
-      {}
+      {/* ── Instructions step ── */}
       {step === 'instructions' && (
         <div>
-          {}
+          {/* Format card */}
           <div style={{
             background: 'var(--bg-subtle)', border: '1px solid var(--border)',
             borderRadius: 8, padding: '16px 20px', marginBottom: 20,
@@ -515,7 +551,7 @@ function ImportCSVModal({ onClose, onSaved }) {
                 { col: 'email',     req: true,  note: 'Email address (must be unique)' },
                 { col: 'phone',     req: true,  note: 'Phone number' },
                 { col: 'company',   req: true,  note: 'Company or organisation name' },
-                { col: 'lead_source', req: false, note: `One of: ${LEAD_SOURCES.join(', ')}` },
+                { col: 'lead_source', req: false, note: leadSources.length ? `One of: ${leadSources.map(s => s.label).join(', ')}` : 'Any configured lead source' },
                 { col: 'notes',     req: false, note: 'Free-form notes' },
               ].map(({ col, req, note }) => (
                 <div key={col} style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
@@ -536,8 +572,8 @@ function ImportCSVModal({ onClose, onSaved }) {
               borderRadius: 6, border: '1px solid var(--border)', fontFamily: 'monospace', fontSize: 11, color: 'var(--text-2)', lineHeight: 1.8,
             }}>
               full_name,email,phone,company,lead_source,notes<br />
-              Jane Smith,jane@acme.com,+1 555 0001,Acme Corp,Website,<br />
-              John Doe,john@example.com,,,,Key decision maker
+              Jane Smith,jane@acme.com,+1 555 0001,Acme Corp,Website,Key account<br />
+              John Doe,john@example.com,+1 555 0002,Example Ltd,Referral,
             </div>
           </div>
 
@@ -546,7 +582,7 @@ function ImportCSVModal({ onClose, onSaved }) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-              Up to 500 rows per import. Rows missing <code style={{ fontFamily: 'monospace' }}>full_name</code> are skipped. Duplicate emails are reported but not blocked.
+              Up to 500 rows per import. Rows with missing required fields are skipped. Rows with duplicate emails are skipped and reported.
             </span>
           </div>
 
@@ -564,7 +600,7 @@ function ImportCSVModal({ onClose, onSaved }) {
         </div>
       )}
 
-      {}
+      {/* ── Preview step ── */}
       {step === 'preview' && (
         <div>
           <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 14 }}>
@@ -587,13 +623,14 @@ function ImportCSVModal({ onClose, onSaved }) {
           )}
           <div style={{ maxHeight: 280, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
             <table className="table" style={{ margin: 0 }}>
-              <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Company</th><th>Source</th></tr></thead>
+              <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Company</th><th>Source</th></tr></thead>
               <tbody>
                 {preview.slice(0, 50).map((r, i) => (
                   <tr key={i}>
                     <td className="text-gray text-sm">{i + 1}</td>
                     <td className="font-semi">{r.full_name}</td>
                     <td className="text-sm text-gray">{r.email || '—'}</td>
+                    <td className="text-sm text-gray">{r.phone || '—'}</td>
                     <td className="text-sm text-gray">{r.company || '—'}</td>
                     <td className="text-sm text-gray">{r.lead_source || '—'}</td>
                   </tr>
@@ -618,7 +655,7 @@ function ImportCSVModal({ onClose, onSaved }) {
         </div>
       )}
 
-      {}
+      {/* ── Result step ── */}
       {step === 'result' && result && (
         <div>
           <div style={{
@@ -661,10 +698,11 @@ function ImportCSVModal({ onClose, onSaved }) {
   )
 }
 
+/* ── Duplicates Modal ───────────────────────────── */
 function DuplicatesModal({ onClose, onMerged }) {
   const [groups,   setGroups]   = useState([])
   const [loading,  setLoading]  = useState(true)
-  const [merging,  setMerging]  = useState(null)  
+  const [merging,  setMerging]  = useState(null)  // 'keepId:sourceId'
   const [merged,   setMerged]   = useState(new Set())
   const [error,    setError]    = useState('')
 
@@ -682,7 +720,7 @@ function DuplicatesModal({ onClose, onMerged }) {
       await api.post(`/contacts/${keepId}/merge`, { source_id: sourceId })
       setMerged(s => new Set([...s, sourceId]))
       onMerged()
-      
+      // Reload groups
       const r = await api.get('/contacts/duplicates')
       setGroups(r.data)
     } catch (e) {

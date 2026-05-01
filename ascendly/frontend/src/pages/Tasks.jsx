@@ -193,7 +193,7 @@ export default function Tasks() {
             </table>
           </div>
         ) : (
-          
+          /* ── Cards view ─────────────────────────────── */
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
@@ -208,22 +208,22 @@ export default function Tasks() {
                   borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 10,
                   borderLeft: `3px solid ${statusColor}`,
                 }}>
-                  {}
+                  {/* Title */}
                   <div className="font-semi" style={{ fontSize: 14, lineHeight: 1.4 }}>{t.title}</div>
 
-                  {}
+                  {/* Type + Status */}
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {t.type && <Chip color="#3B82F6" label={t.type} />}
                     <Chip color={statusColor} label={t.status} />
                   </div>
 
-                  {}
+                  {/* Assigned to */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <UserAvatar name={t.assigned_to_name} size={22} />
                     <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{t.assigned_to_name ?? '—'}</span>
                   </div>
 
-                  {}
+                  {/* Footer: due date + action */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
                     <span style={{ fontSize: 11, fontWeight: overdue ? 700 : 400, color: overdue ? 'var(--red)' : 'var(--text-3)' }}>
                       {overdue ? '⚠ ' : ''}{fmtDate(t.due_date)}
@@ -244,7 +244,7 @@ export default function Tasks() {
         )}
       </div>
 
-      {}
+      {/* ── Load More ── */}
       {!loading && tasks.length < taskTotal && (
         <div style={{ textAlign: 'center', marginTop: 12 }}>
           <button
@@ -270,6 +270,7 @@ export default function Tasks() {
   )
 }
 
+/* ── Create Task Modal ──────────────────────────── */
 function CreateTaskModal({ users, currentUser, onClose, onSaved }) {
   const [form, setForm] = useState({
     title: '',
