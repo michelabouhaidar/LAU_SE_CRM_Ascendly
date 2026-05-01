@@ -1,6 +1,6 @@
 # Ascendly CRM
 
-A full-stack, multi-tenant CRM built for sales teams. Manage contacts, track deals through a configurable pipeline, log interactions, assign tasks, run approvals, and monitor performance across 23 analytics reports — all behind JWT authentication and role-based access control.
+A full-stack, multi-tenant CRM built for sales teams. Manage contacts, track deals through a configurable pipeline, log interactions, assign tasks, run approvals, and monitor performance across 25 analytics reports — all behind JWT authentication and role-based access control.
 
 ---
 
@@ -28,9 +28,10 @@ A full-stack, multi-tenant CRM built for sales teams. Manage contacts, track dea
 - **Contact management** — import via CSV, duplicate detection, merge, tagging, interaction timeline
 - **Task management** — create, assign, and track tasks linked to deals or contacts
 - **Approval workflows** — discount/deal override requests with role-based approval
-- **Reporting** — 23 analytics endpoints: revenue, forecast, leaderboard, pipeline, conversion, win/loss, team and personal summaries, and more
+- **Reporting** — 25 analytics endpoints: revenue, forecast, leaderboard, pipeline, conversion, win/loss, team and personal summaries, and more
 - **Audit log** — immutable record of every create, update, delete, and stage change
-- **Security** — bcrypt passwords, JWT + refresh tokens, per-session revocation, rate limiting, Helmet headers, CORS, HTTPS-only in production
+- **Security** — bcrypt passwords, JWT (1 h) + rotating refresh tokens (7 d), token-version–based instant session revocation, account lockout after 5 failed attempts, per-IP and per-org rate limiting at both Nginx and Express layers, origin guard (CSRF defense-in-depth), Helmet + Nginx security headers (HSTS, CSP, X-Frame-Options), CORS, password complexity enforcement, HTTPS-only in production
+- **Deal pipeline enforcement** — forward-only sequential stage movement, activity gate (requires ≥1 interaction and ≥1 task), SDR ceiling at Qualified stage, optimistic concurrency conflict detection
 
 ---
 
@@ -41,7 +42,7 @@ A full-stack, multi-tenant CRM built for sales teams. Manage contacts, track dea
 | Frontend | React 18, Vite, React Router 6, Axios |
 | Backend | Node 20, Express 4, jsonwebtoken, bcryptjs, express-validator, Helmet, Winston |
 | Database | PostgreSQL 16 |
-| Proxy | Nginx 1.27 (SSL/TLS termination, rate limiting, gzip) |
+| Proxy | Nginx 1.27 (SSL/TLS termination, HTTP/2, rate limiting, gzip, HSTS + CSP headers) |
 | Containers | Docker + Docker Compose |
 
 ---
@@ -51,16 +52,17 @@ A full-stack, multi-tenant CRM built for sales teams. Manage contacts, track dea
 ```
 Browser
   │
-  ▼
-Nginx :443 (HTTPS)
-  ├── /api/*          → backend:5000   (Express REST API)
-  └── /*              → frontend:5173  (React + Vite dev server, HMR)
+  ├── :80  (HTTP) → Nginx → 301 redirect to HTTPS
+  │                        /health → 200 ok (Nginx-level, no backend hit)
+  │
+  └── :443 (HTTPS, HTTP/2) → Nginx
+                               ├── /api/*   → backend   (Express REST API)
+                               └── /*       → frontend  (React + Vite, HMR)
 
-backend:5000
-  └── PostgreSQL db:5432
+backend → PostgreSQL (db)
 ```
 
-All four services run as Docker containers on a shared bridge network (`ascendly_net`). Nginx is the only public entry point — the backend and frontend are not directly exposed in production.
+All four services run as Docker containers on a shared bridge network (`ascendly_net`). **Only ports 80 and 443 are published to the host.** The backend, frontend, and database are not reachable from localhost — all traffic must go through Nginx, which applies rate limiting and security headers before forwarding requests.
 
 ---
 
@@ -164,13 +166,14 @@ ADMIN_PASSWORD=Change_Me_On_First_Login!
 
 # ── JWT ────────────────────────────────────────────────────────
 JWT_SECRET=generate_a_64_byte_hex_string_here
-JWT_EXPIRES_IN=8h             # access token lifetime
+JWT_EXPIRES_IN=8h             # access tokens are hardcoded to 1 h
 
 # ── Security ───────────────────────────────────────────────────
 BCRYPT_ROUNDS=12
 RATE_LIMIT_WINDOW_MS=900000   # 15 minutes
 RATE_LIMIT_MAX=500            # requests per window (general API)
 LOGIN_RATE_LIMIT_MAX=5        # max login attempts per window
+ORG_RATE_LIMIT_MAX=300        # requests per minute per organization
 
 # ── CORS ───────────────────────────────────────────────────────
 CORS_ORIGIN=https://your-domain.com
@@ -199,30 +202,10 @@ VITE_API_URL=https://your-domain.com/api
 
 1. Navigate to `https://localhost` (development) or your domain (production)
 2. Log in with `ADMIN_EMAIL` and `ADMIN_PASSWORD` from your `.env`
-3. You will be prompted to **change your password** immediately on first login
-4. After changing your password, you will be redirected to the dashboard
 
 ### Creating additional users
 
-Go to **Admin → Users → Invite User** and assign a role. The new user will receive a temporary password and be required to change it on first login.
-
----
-
-## Database Migrations
-
-The project includes a migration runner for incremental schema changes after the initial setup.
-
-```bash
-# Apply all pending migrations
-docker compose exec backend node migrate.js
-
-# Check migration status (applied vs. pending)
-docker compose exec backend node migrate.js --status
-```
-
-Migrations are SQL files placed in `backend/migrations/`, named `0001_description.sql`, `0002_description.sql`, etc. Each is applied in a transaction — if a migration fails, it is rolled back and the runner stops.
-
-The initial schema (`postgres/init.sql`) is applied automatically when the database container starts for the first time. Migrations are used for subsequent changes only.
+Go to **Admin → Users ** and assign a role. The new user will receive a temporary password and be required to change it on first login.
 
 ---
 
@@ -235,15 +218,24 @@ Include the token in every request:
 Authorization: Bearer <access_token>
 ```
 
-### Authentication
+### Health
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/auth/login` | Email + password login, returns access + refresh tokens |
-| POST | `/auth/refresh` | Exchange a refresh token for a new access token |
-| POST | `/auth/logout` | Revoke the current refresh token |
+| GET | `/health` | Nginx-level probe — returns `200 ok` immediately, no auth (HTTP port 80) |
+| GET | `/api/health` | Backend probe — queries the database and returns `{ status, db }` |
+
+### Authentication
+
+Login locks the account for 15 minutes after 5 consecutive failed attempts.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/auth/login` | Email + password login, returns 1 h access token + 7 d rotating refresh token |
+| POST | `/auth/refresh` | Exchange a refresh token for a new access + refresh token pair (rotation) |
+| POST | `/auth/logout` | Revoke all sessions by incrementing the token version |
 | GET | `/auth/me` | Get the current authenticated user |
-| POST | `/auth/change-password` | Change own password |
+| POST | `/auth/change-password` | Change own password (enforces complexity rules) |
 
 ### Contacts
 
@@ -254,14 +246,13 @@ Authorization: Bearer <access_token>
 | GET | `/contacts/duplicates` | Find duplicate contacts by email or name |
 | GET | `/contacts/:id` | Get a single contact with tags |
 | PATCH | `/contacts/:id` | Update a contact |
-| DELETE | `/contacts/:id` | Soft-delete a contact (Admin only) |
-| POST | `/contacts/import` | Bulk import from CSV |
+| POST | `/contacts/import` | Start async CSV import — returns `202 { jobId }` immediately |
+| GET | `/contacts/import/:jobId` | Poll import job status (`pending` → `done`, with error list) |
 | POST | `/contacts/:id/merge` | Merge two contacts (keeps `:id`, deletes source) |
 | GET | `/contacts/:id/interactions` | All interactions across every deal for this contact |
 | GET | `/contacts/:id/stage-history` | All stage moves across every deal for this contact |
 | GET | `/contacts/:id/tags` | List tags assigned to a contact |
 | POST | `/contacts/:id/tags` | Assign a tag to a contact |
-| DELETE | `/contacts/:id/tags/:tagId` | Remove a tag from a contact |
 
 ### Deals
 
@@ -280,6 +271,7 @@ Authorization: Bearer <access_token>
 | GET | `/deals/:id/comments` | List comments |
 | POST | `/deals/:id/comments` | Post a comment |
 | DELETE | `/deals/:id/comments/:cid` | Delete a comment (author or Admin) |
+| GET | `/deals/:id/approval` | List all approvals for a deal |
 | GET | `/deals/:id/value-history` | Deal value change history |
 
 ### Tasks
@@ -290,20 +282,19 @@ Authorization: Bearer <access_token>
 | POST | `/tasks` | Create a task |
 | GET | `/tasks/:id` | Get a single task |
 | PATCH | `/tasks/:id` | Update a task |
-| DELETE | `/tasks/:id` | Delete a task (Admin, Sales Manager) |
 
 ### Approvals
 
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/approvals` | List approval requests (filter by status) |
-| POST | `/approvals` | Submit an approval request |
+| POST | `/approvals` | Submit an approval request (Admin, Sales Manager, Sales Rep — SDRs excluded) |
 | GET | `/approvals/:id` | Get a single approval |
 | PATCH | `/approvals/:id` | Approve or reject a request |
 
 ### Reports
 
-All report endpoints require `Admin`, `Sales Manager`, or `Finance` role.
+Most report endpoints require `Admin`, `Sales Manager`, or `Finance` role. Exceptions: `team-summary` requires `Admin` or `Sales Manager` (Finance excluded); `personal-summary`, `my-stats`, `my-monthly`, and `search` are accessible to any authenticated user.
 
 | Endpoint | Description |
 |---|---|
@@ -313,18 +304,27 @@ All report endpoints require `Admin`, `Sales Manager`, or `Finance` role.
 | `/reports/leaderboard` | Rep performance (deals won, revenue, open pipeline) |
 | `/reports/forecast` | Weighted forecast (expected value × probability) |
 | `/reports/conversion` | Win rate, loss rate, open deal count |
-| `/reports/team-summary` | KPI summary for the whole team |
-| `/reports/personal-summary` | KPI summary for the authenticated rep |
-| `/reports/search?q=` | Global search across contacts, deals, and tasks |
+| `/reports/team-summary` | KPI summary for the whole team (Admin / Sales Manager only) |
+| `/reports/personal-summary` | KPI summary for the authenticated rep (any role) |
+| `/reports/search?q=` | Global search across contacts, deals, and tasks (any role) |
 
 Additional analytics endpoints: `/stage-velocity`, `/deal-cycle`, `/stage-conversion`, `/rep-pipeline`, `/interaction-types`, `/approval-stats`, `/deal-size-buckets`, `/monthly-created`, `/task-completion-by-rep`, `/my-stats`, `/my-monthly`, `/contact-growth`, `/deal-age-buckets`, `/revenue-by-month-rep`, `/win-loss-monthly`, `/lead-source-revenue`.
+
+### Users
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/users` | List users in the org (all authenticated users; super-admin sees all orgs) |
+| GET | `/users/:id` | Get a single user (Admin only) |
+| POST | `/users` | Create a user (Admin only) |
+| PATCH | `/users/:id` | Update a user (Admin only) |
+| POST | `/users/:id/reset-password` | Set a new password and force reset on next login (Admin only) |
 
 ### Other Resources
 
 | Resource | Base path | Description |
 |---|---|---|
-| Users | `/users` | User management (Admin only) |
-| Organizations | `/organizations` | Organization settings |
+| Organizations | `/organizations` | Organization settings (super-admin: create/update orgs) |
 | Pipeline stages | `/pipeline-stages` | Stage activation, required field configuration |
 | Contact tags | `/contact-tags` | Tag CRUD |
 | Deal templates | `/deal-templates` | Reusable deal templates |
@@ -347,7 +347,6 @@ ascendly/
 │       ├── middleware/
 │       │   ├── auth.js         # JWT authentication, RBAC, super-admin guard
 │       │   ├── audit.js        # writeAudit() helper used by all routes
-│       │   ├── validate.js     # express-validator error formatter
 │       │   └── respond.js      # sendOk() helper
 │       ├── routes/             # One file per resource (13 modules)
 │       └── utils/
@@ -370,7 +369,7 @@ ascendly/
 │       └── pages/              # 12 page components
 │
 ├── postgres/
-│   ├── init.sql                # Full schema (22 tables) + seed data
+│   ├── init.sql                # Full schema (21 tables) + seed data
 │   └── seed.sh                 # Creates admin user from ADMIN_* env vars
 │
 ├── nginx/
